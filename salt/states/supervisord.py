@@ -72,7 +72,6 @@ def running(name,
                 name, _msg, _update))
         return
 
-
     changes = []
     if needs_update:
         comment = 'Adding service: {0}'.format(name)
@@ -157,7 +156,7 @@ def dead(name,
             conf_file=conf_file,
             bin_env=bin_env
         )
-        if not current_status.has_key(name) or _is_stopped_state(current_status[name]['state']):
+        if name not in current_status or _is_stopped_state(current_status[name]['state']):
             ret['comment'] = "Service {0} is not running".format(name)
         else:
             result = {name: __salt__['supervisord.stop'](
