@@ -17,6 +17,7 @@ import time
 import traceback
 import sys
 import signal
+import copy
 
 # Import third party libs
 import zmq
@@ -435,7 +436,9 @@ class Minion(object):
         opts['grains'] = salt.loader.grains(opts)
         opts.update(resolve_dns(opts))
         self.opts = opts
-        self.authenticate(timeout, safe)
+        self.auth_timeout = timeout
+        self.auth_safe = safe
+        self.authenticate(self.auth_timeout, self.auth_safe)
         self.opts['pillar'] = salt.pillar.get_pillar(
             opts,
             opts['grains'],
@@ -447,6 +450,24 @@ class Minion(object):
         self.functions, self.returners = self.__load_modules()
         self.matcher = Matcher(self.opts, self.functions)
         self.proc_dir = get_proc_dir(opts['cachedir'])
+        self.schedule = salt.utils.schedule.Schedule(
+            self.opts,
+            self.functions,
+            self.returners)
+
+    def __getstate__(self):
+        # Minion instance must be picklable for multiprocessing on windows
+        # Strip the unpicklable attributes and recreate on the other side
+        picklable_state = copy.copy(self.__dict__)
+        picklable_state.remove('functions')
+        picklable_state.remove('returners')
+        picklable_state.remove('schedule')
+        return picklable_state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.authenticate(self.auth_timeout, self.auth_safe)
+        self.functions, self.returners = self.__load_modules()
         self.schedule = salt.utils.schedule.Schedule(
             self.opts,
             self.functions,
