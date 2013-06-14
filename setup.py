@@ -42,6 +42,7 @@ if 'USE_SETUPTOOLS' in os.environ or 'setuptools' in sys.modules:
 if with_setuptools is False:
     import warnings
     from distutils.command.install import install
+    from distutils.command.install_scripts import install_scripts
     from distutils.core import setup
     warnings.filterwarnings(
         'ignore',
@@ -152,6 +153,20 @@ class Install(install):
         self.distribution.running_salt_install = True
         # Run install.run
         install.run(self)
+
+class InstallScripts(install_scripts):
+    """Strip .py extension from scripts if not on windows.
+       Multriprocessing requires the .py script on windows.
+    """
+    def run(self):
+        install_scripts.run(self)
+        try:
+            if (os.name != "nt") and sys.argv[1] != '-remove':
+                for script in self.get_outputs():
+                    if script.endswith(".py"):
+                        os.rename(script, script[0:-3])
+        except IndexError:
+            pass
 
 
 NAME = 'salt'
@@ -288,26 +303,30 @@ if HAS_ESKY:
     setup_kwargs['options'] = options
 
 if with_setuptools:
+    if os.name == 'nt':
+        ext = '.py'
+    else:
+        ext = ''
     setup_kwargs['entry_points'] = {
-        'console_scripts': ['salt-master = salt.scripts:salt_master',
-                            'salt-minion = salt.scripts:salt_minion',
-                            'salt-syndic = salt.scripts:salt_syndic',
-                            'salt-key = salt.scripts:salt_key',
-                            'salt-cp = salt.scripts:salt_cp',
-                            'salt-call = salt.scripts:salt_call',
-                            'salt-run = salt.scripts:salt_run',
-                            'salt = salt.scripts:salt_main'
+        'console_scripts': ['salt-master{0} = salt.scripts:salt_master.py'.format(ext),
+                            'salt-minion{0} = salt.scripts:salt_minion.py'.format(ext),
+                            'salt-syndic{0} = salt.scripts:salt_syndic.py'.format(ext),
+                            'salt-key{0} = salt.scripts:salt_key.py'.format(ext),
+                            'salt-cp{0} = salt.scripts:salt_cp.py'.format(ext),
+                            'salt-call{0} = salt.scripts:salt_call.py'.format(ext),
+                            'salt-run{0} = salt.scripts:salt_run.py'.format(ext),
+                            'salt{0} = salt.scripts:salt_main.py'.format(ext)
                             ],
     }
 else:
-    setup_kwargs['scripts'] = ['scripts/salt-master',
-                               'scripts/salt-minion',
-                               'scripts/salt-syndic',
-                               'scripts/salt-key',
-                               'scripts/salt-cp',
-                               'scripts/salt-call',
-                               'scripts/salt-run',
-                               'scripts/salt']
+    setup_kwargs['scripts'] = ['scripts/salt-master.py',
+                               'scripts/salt-minion.py',
+                               'scripts/salt-syndic.py',
+                               'scripts/salt-key.py',
+                               'scripts/salt-cp.py',
+                               'scripts/salt-call.py',
+                               'scripts/salt-run.py',
+                               'scripts/salt.py']
 
 if __name__ == '__main__':
     setup(**setup_kwargs)
