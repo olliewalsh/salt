@@ -688,7 +688,7 @@ class ShellCase(TestCase):
         '''
         Execute a script with the given argument string
         '''
-        path = os.path.join(SCRIPT_DIR, script)
+        path = os.path.join(SCRIPT_DIR, '{0}.py'.format(script))
         if not os.path.isfile(path):
             return False
         ppath = 'PYTHONPATH={0}:{1}'.format(CODE_DIR, ':'.join(sys.path[1:]))
