@@ -303,19 +303,15 @@ if HAS_ESKY:
     setup_kwargs['options'] = options
 
 if with_setuptools:
-    if os.name == 'nt':
-        ext = '.py'
-    else:
-        ext = ''
     setup_kwargs['entry_points'] = {
-        'console_scripts': ['salt-master{0} = salt.scripts:salt_master.py'.format(ext),
-                            'salt-minion{0} = salt.scripts:salt_minion.py'.format(ext),
-                            'salt-syndic{0} = salt.scripts:salt_syndic.py'.format(ext),
-                            'salt-key{0} = salt.scripts:salt_key.py'.format(ext),
-                            'salt-cp{0} = salt.scripts:salt_cp.py'.format(ext),
-                            'salt-call{0} = salt.scripts:salt_call.py'.format(ext),
-                            'salt-run{0} = salt.scripts:salt_run.py'.format(ext),
-                            'salt{0} = salt.scripts:salt_main.py'.format(ext)
+        'console_scripts': ['salt-master = salt.scripts:salt_master.py',
+                            'salt-minion = salt.scripts:salt_minion.py',
+                            'salt-syndic = salt.scripts:salt_syndic.py',
+                            'salt-key = salt.scripts:salt_key.py',
+                            'salt-cp = salt.scripts:salt_cp.py',
+                            'salt-call = salt.scripts:salt_call.py',
+                            'salt-run = salt.scripts:salt_run.py',
+                            'salt = salt.scripts:salt_main.py'
                             ],
     }
 else:
