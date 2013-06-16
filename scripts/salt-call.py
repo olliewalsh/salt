@@ -4,8 +4,7 @@ Directly call a salt command in the modules, does not require a running salt
 minion to run.
 '''
 
-from salt.scripts import salt_call
-
+import salt.scripts
 
 if __name__ == '__main__':
-    salt_call()
+    salt.scripts.salt_call()

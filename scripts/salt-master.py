@@ -3,8 +3,8 @@
 Start the salt-master
 '''
 
-from salt.scripts import salt_master
+import salt.scripts
 
 
 if __name__ == '__main__':
-    salt_master()
+    salt.scripts.salt_master()

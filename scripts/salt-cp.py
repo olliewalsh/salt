@@ -3,8 +3,8 @@
 Publish commands to the salt system from the command line on the master.
 '''
 
-from salt.scripts import salt_cp
+import salt.scripts
 
 
 if __name__ == '__main__':
-    salt_cp()
+    salt.scripts.salt_cp()

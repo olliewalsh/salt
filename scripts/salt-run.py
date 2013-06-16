@@ -3,8 +3,8 @@
 Execute a salt convenience routine
 '''
 
-from salt.scripts import salt_run
+import from salt.scripts
 
 
 if __name__ == '__main__':
-    salt_run()
+    salt.scripts.salt_run()

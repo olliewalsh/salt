@@ -3,8 +3,8 @@
 Manage the authentication keys with salt-key
 '''
 
-from salt.scripts import salt_key
+import salt.scripts
 
 
 if __name__ == '__main__':
-    salt_key()
+    salt.scripts.salt_key()
