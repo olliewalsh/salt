@@ -3,7 +3,7 @@
 Execute a salt convenience routine
 '''
 
-import from salt.scripts
+import salt.scripts
 
 
 if __name__ == '__main__':
