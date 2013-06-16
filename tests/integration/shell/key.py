@@ -40,7 +40,7 @@ class KeyTest(integration.ShellCase,
         data = self.run_key('-L --json-out', catch_stderr=True)
         if version.__version_info__ >= (0, 12):
             self.assertIn(
-                'salt-key: error: The option --json-out was deprecated. '
+                'error: The option --json-out was deprecated. '
                 'Please use \'--out json\' instead.',
                 data[1]
             )
@@ -66,7 +66,7 @@ class KeyTest(integration.ShellCase,
         data = self.run_key('-L --yaml-out', catch_stderr=True)
         if version.__version_info__ >= (0, 12):
             self.assertIn(
-                'salt-key: error: The option --yaml-out was deprecated. '
+                'error: The option --yaml-out was deprecated. '
                 'Please use \'--out yaml\' instead.',
                 data[1]
             )
@@ -89,7 +89,7 @@ class KeyTest(integration.ShellCase,
         data = self.run_key('-L --raw-out', catch_stderr=True)
         if version.__version_info__ >= (0, 12):
             self.assertIn(
-                'salt-key: error: The option --raw-out was deprecated. '
+                'error: The option --raw-out was deprecated. '
                 'Please use \'--out raw\' instead.',
                 data[1]
             )
@@ -150,14 +150,14 @@ class KeyTest(integration.ShellCase,
                 arg_str + ' --keysize=1024', catch_stderr=True
             )
             self.assertIn(
-                'salt-key: error: The minimum value for keysize is 2048', error
+                'error: The minimum value for keysize is 2048', error
             )
 
             data, error = self.run_key(
                 arg_str + ' --keysize=32769', catch_stderr=True
             )
             self.assertIn(
-                'salt-key: error: The maximum value for keysize is 32768', error
+                'error: The maximum value for keysize is 32768', error
             )
         finally:
             shutil.rmtree(tempdir)
