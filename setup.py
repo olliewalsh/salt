@@ -35,6 +35,7 @@ if 'USE_SETUPTOOLS' in os.environ or 'setuptools' in sys.modules:
     try:
         from setuptools import setup
         from setuptools.command.install import install
+        from setuptools.command.install_scripts import install_scripts as InstallScripts
         with_setuptools = True
     except:
         with_setuptools = False
@@ -154,20 +155,20 @@ class Install(install):
         # Run install.run
         install.run(self)
 
-class InstallScripts(install_scripts):
-    """Strip .py extension from scripts if not on windows.
-       Multriprocessing requires the .py script on windows.
-    """
-    def run(self):
-        install_scripts.run(self)
-        try:
-            if (os.name != "nt") and sys.argv[1] != '-remove':
-                for script in self.get_outputs():
-                    if script.endswith(".py"):
-                        os.rename(script, script[0:-3])
-        except IndexError:
-            pass
-
+if with_setuptools is False:
+    class InstallScripts(install_scripts):
+        """Strip .py extension from scripts if not on windows.
+           Multriprocessing requires the .py script on windows.
+        """
+        def run(self):
+            install_scripts.run(self)
+            try:
+                if (os.name != "nt") and sys.argv[1] != '-remove':
+                    for script in self.get_outputs():
+                        if script.endswith(".py"):
+                            os.rename(script, script[0:-3])
+            except IndexError:
+                pass
 
 NAME = 'salt'
 VER = __version__
@@ -198,7 +199,8 @@ setup_kwargs = {'name': NAME,
                     'test': TestCommand,
                     'clean': Clean,
                     'build': Build,
-                    'install': Install
+                    'install': Install,
+                    'install_scripts': InstallScripts
                 },
                 'classifiers': ['Programming Language :: Python',
                                 'Programming Language :: Cython',
@@ -304,14 +306,14 @@ if HAS_ESKY:
 
 if with_setuptools:
     setup_kwargs['entry_points'] = {
-        'console_scripts': ['salt-master = salt.scripts:salt_master.py',
-                            'salt-minion = salt.scripts:salt_minion.py',
-                            'salt-syndic = salt.scripts:salt_syndic.py',
-                            'salt-key = salt.scripts:salt_key.py',
-                            'salt-cp = salt.scripts:salt_cp.py',
-                            'salt-call = salt.scripts:salt_call.py',
-                            'salt-run = salt.scripts:salt_run.py',
-                            'salt = salt.scripts:salt_main.py'
+        'console_scripts': ['salt-master = salt.scripts:salt_master',
+                            'salt-minion = salt.scripts:salt_minion',
+                            'salt-syndic = salt.scripts:salt_syndic',
+                            'salt-key = salt.scripts:salt_key',
+                            'salt-cp = salt.scripts:salt_cp',
+                            'salt-call = salt.scripts:salt_call',
+                            'salt-run = salt.scripts:salt_run',
+                            'salt = salt.scripts:salt_main'
                             ],
     }
 else:
