@@ -471,9 +471,9 @@ class Minion(object):
         # Minion instance must be picklable for multiprocessing on windows
         # Strip the unpicklable attributes and recreate on the other side
         picklable_state = copy.copy(self.__dict__)
-        picklable_state.remove('functions')
-        picklable_state.remove('returners')
-        picklable_state.remove('schedule')
+        del picklable_state['functions']
+        del picklable_state['returners']
+        del picklable_state['schedule']
         return picklable_state
 
     def __setstate__(self, state):
