@@ -155,7 +155,7 @@ class SupervisorManager(object):
                     return 
                 self._comment = 'Updating {0}'.format(self.name)
                 if not self._is_stopped():
-                     self._stop()
+                    self._stop()
                 self._remove()  
                 self._add()
             else:
