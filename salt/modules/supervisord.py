@@ -190,11 +190,14 @@ def status(name=None, user=None, conf_file=None, bin_env=None):
     '''
     all_process = {}
     for line in status_raw(name, user, conf_file, bin_env).splitlines():
+        if 'no such' in line.lower():
+            # Named process doesn't exist or supervisord isn't running
+            continue
         if len(line.split()) > 2:
-            process, state, reason = line.split(None, 2)
+            process, state, info = line.split(None, 2)
         else:
-            process, state, reason = line.split() + ['']
-        all_process[process] = {'state': state, 'reason': reason}
+            process, state, info = line.split() + ['']
+        all_process[process] = {'state': state, 'info': info}
     return all_process
 
 def status_raw(name=None, user=None, conf_file=None, bin_env=None):
