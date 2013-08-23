@@ -1129,8 +1129,6 @@ class MinionWorker(object):
                 return self.pub_sock.send(data)
             except zmq.ZMQError:
                 log.exception('Worker send error')
-                pass
-
 
     def shutdown(self):
         if self.proc.poll() is None:
@@ -1208,7 +1206,7 @@ class MinionPool(MinionBase):
                 worker.shutdown()
                 self.__dead_workers[pid] = worker
             else:
-                still_pending[pid]=worker
+                still_pending[pid] = worker
         self.__pending_workers = still_pending
 
         still_busy = {}
@@ -1218,7 +1216,7 @@ class MinionPool(MinionBase):
                 worker.shutdown()
                 self.__dead_workers[pid] = worker
             else:
-                still_busy[pid]=worker
+                still_busy[pid] = worker
         self.__busy_workers = still_busy
 
         still_ready = {}
@@ -1228,7 +1226,7 @@ class MinionPool(MinionBase):
                 worker.shutdown()
                 self.__dead_workers[pid] = worker
             else:
-                still_ready[pid]=worker
+                still_ready[pid] = worker
         self.__ready_workers = still_ready
 
         log.debug("DEAD: {0}".format(len(self.__dead_workers)))
@@ -1358,7 +1356,7 @@ class MinionPool(MinionBase):
         self.poller.register(self.socket, zmq.POLLIN)
         self.epoller.register(self.epub_sock, zmq.POLLIN)
 
-        data={
+        data = {
             'sock_uri': sock_uri,
             'pid': os.getpid() 
         }
@@ -1396,8 +1394,8 @@ class MinionPool(MinionBase):
                     idle = time.time() + self.idle_timeout                    
 
                 while self.epoller.poll(1):
-                        package = self.epub_sock.recv()
-                        self.handle_worker_event(package)
+                    package = self.epub_sock.recv()
+                    self.handle_worker_event(package)
                 time.sleep(0.05)
             except zmq.ZMQError:
                 # This is thrown by the interrupt caused by python handling the

@@ -157,7 +157,7 @@ class Schedule(object):
             else:
                 log.debug('Running scheduled job: {0}'.format(job))
 
-            self._run(func,data)
+            self._run(func, data)
 
             self.intervals[job] = int(time.time())
 
