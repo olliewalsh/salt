@@ -210,7 +210,7 @@ class LocalClient(object):
             timeout=self._get_timeout(timeout),
             **kwargs)
 
-        self.event.subscribe(pub_data['jid'])
+        self.event.subscribe('')
 
         return self._check_pub_data(pub_data)
 
