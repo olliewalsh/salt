@@ -618,19 +618,20 @@ minion to clean the keys.
 
     open_mode: False
 
-Thread Settings
+Process Settings
 ---------------
 
-.. conf_minion:: multiprocessing
+.. conf_minion:: processpool
 
-Default: ``True``
+Default: ``False``
 
-Disable multiprocessing support by default when a minion receives a
-publication a new process is spawned and the command is executed therein.
+If this option is set then a pool of worker processses is used instead of 
+spawning a daemon process to execution each command on the minion.
+If fork() is not supported by the OS (e.g Windows) a pool is always used.
 
 .. code-block:: yaml
 
-    multiprocessing: True
+    processpool: False
 
 Minion Logging Settings
 -----------------------

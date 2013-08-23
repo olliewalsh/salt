@@ -14,6 +14,7 @@ import logging
 import fnmatch
 import time
 import sys
+import sqlite3
 
 # Import salt libs
 import salt.payload
@@ -353,28 +354,39 @@ def running():
 
         salt '*' saltutil.running
     '''
-    procs = __salt__['status.procs']()
+    
     ret = []
     serial = salt.payload.Serial(__opts__)
     pid = os.getpid()
+
     proc_dir = os.path.join(__opts__['cachedir'], 'proc')
     if not os.path.isdir(proc_dir):
         return []
-    for fn_ in os.listdir(proc_dir):
-        path = os.path.join(proc_dir, fn_)
-        with salt.utils.fopen(path, 'rb') as fp_:
-            data = serial.loads(fp_.read())
-        if not isinstance(data, dict):
-            # Invalid serial object
-            continue
-        if not procs.get(str(data['pid'])):
-            # The process is no longer running, clear out the file and
-            # continue
-            os.remove(path)
-            continue
-        if data.get('pid') == pid:
-            continue
-        ret.append(data)
+
+    proc_db = os.path.join(proc_dir, 'jobs.sqlite3')
+    if os.path.exists(proc_db):
+        con = sqlite3.connect(proc_db)
+        for jid, sdata in con.execute("select jid, data from jobs"):
+            data = serial.loads(sdata)
+            ret.append(data)
+    else:
+        pid = os.getpid()
+        procs = __salt__['status.procs']()
+        for fn_ in os.listdir(proc_dir):
+            path = os.path.join(proc_dir, fn_)
+            with salt.utils.fopen(path, 'rb') as fp_:
+                data = serial.loads(fp_.read())
+            if not isinstance(data, dict):
+                # Invalid serial object
+                continue
+            if not procs.get(str(data['pid'])):
+                # The process is no longer running, clear out the file and
+                # continue
+                os.remove(path)
+                continue
+            if data.get('pid') == pid:
+                continue
+            ret.append(data)
     return ret
 
 

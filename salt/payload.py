@@ -12,6 +12,7 @@ import salt.log
 import salt.crypt
 from salt.exceptions import SaltReqTimeoutError
 from salt._compat import pickle
+import uuid
 
 # Import third party libs
 try:
@@ -151,7 +152,7 @@ class SREQ(object):
     '''
     Create a generic interface to wrap salt zeromq req calls.
     '''
-    def __init__(self, master, id_='', serial='msgpack', linger=0):
+    def __init__(self, master, id_='', serial='msgpack', linger=5000):
         self.master = master
         self.serial = Serial(serial)
         self.context = zmq.Context()
@@ -164,11 +165,12 @@ class SREQ(object):
         if master.startswith('tcp://[') and hasattr(zmq, 'IPV4ONLY'):
             # IPv6 sockets work for both IPv6 and IPv4 addresses
             self.socket.setsockopt(zmq.IPV4ONLY, 0)
-        self.socket.linger = linger
-        if id_:
-            self.socket.setsockopt(zmq.IDENTITY, id_)
+        if not id_:
+            id_ = 'salt-{0}'.format(uuid.uuid1())
+        self.socket.setsockopt(zmq.IDENTITY, id_)
         self.socket.connect(master)
         self.poller = zmq.Poller()
+        self.linger = linger
 
     def send(self, enc, load, tries=1, timeout=60):
         '''
@@ -204,11 +206,11 @@ class SREQ(object):
     def destroy(self):
         for socket in self.poller.sockets.keys():
             if socket.closed is False:
-                socket.setsockopt(zmq.LINGER, 1)
+                socket.setsockopt(zmq.LINGER, self.linger)
                 socket.close()
             self.poller.unregister(socket)
         if self.socket.closed is False:
-            self.socket.setsockopt(zmq.LINGER, 1)
+            self.socket.setsockopt(zmq.LINGER, self.linger)
             self.socket.close()
         if self.context.closed is False:
             self.context.term()

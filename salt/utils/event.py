@@ -58,6 +58,7 @@ class SaltEvent(object):
         self.cpub = False
         self.cpush = False
         self.puburi, self.pulluri = self.__load_uri(sock_dir, node, **kwargs)
+        self.linger = 5000
 
     def __load_uri(self, sock_dir, node, **kwargs):
         '''
@@ -186,10 +187,10 @@ class SaltEvent(object):
             # Wait at most 2.5 secs to send any remaining messages in the
             # socket or the context.term() bellow will hang indefinitely.
             # See https://github.com/zeromq/pyzmq/issues/102
-            self.sub.setsockopt(zmq.LINGER, 1)
+            self.sub.setsockopt(zmq.LINGER, self.linger)
             self.sub.close()
         if self.cpush is True and self.push.closed is False:
-            self.push.setsockopt(zmq.LINGER, 1)
+            self.push.setsockopt(zmq.LINGER, self.linger)
             self.push.close()
         # If sockets are not unregistered from a poller, nothing which touches
         # that poller gets garbage collected. The Poller itself, its
@@ -197,7 +198,7 @@ class SaltEvent(object):
         for socket in self.poller.sockets.keys():
             if socket.closed is False:
                 # Should already be closed from above, but....
-                socket.setsockopt(zmq.LINGER, 1)
+                socket.setsockopt(zmq.LINGER, self.linger)
                 socket.close()
             self.poller.unregister(socket)
         if self.context.closed is False:

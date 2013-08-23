@@ -369,13 +369,6 @@ class Publisher(multiprocessing.Process):
         context = zmq.Context(1)
         # Prepare minion publish socket
         pub_sock = context.socket(zmq.PUB)
-        # if 2.1 >= zmq < 3.0, we only have one HWM setting
-        try:
-            pub_sock.setsockopt(zmq.HWM, 1)
-        # in zmq >= 3.0, there are separate send and receive HWM settings
-        except AttributeError:
-            pub_sock.setsockopt(zmq.SNDHWM, 1)
-            pub_sock.setsockopt(zmq.RCVHWM, 1)
         if self.opts['ipv6'] is True and hasattr(zmq, 'IPV4ONLY'):
             # IPv6 sockets work for both IPv6 and IPv4 addresses
             pub_sock.setsockopt(zmq.IPV4ONLY, 0)
@@ -416,6 +409,7 @@ class Publisher(multiprocessing.Process):
                 pull_sock.close()
             if context.closed is False:
                 context.term()
+
 
 
 class ReqServer(object):
@@ -1018,58 +1012,62 @@ class AESFuncs(object):
                     self.opts['hash_type'],
                     load.get('nocache', False))
         log.info('Got return from {id} for job {jid}'.format(**load))
-        self.event.fire_event(load, load['jid'])
-        self.event.fire_ret_load(load)
-        if self.opts['master_ext_job_cache']:
-            fstr = '{0}.returner'.format(self.opts['master_ext_job_cache'])
-            self.mminion.returners[fstr](load)
-            return
-        if not self.opts['job_cache'] or self.opts.get('ext_job_cache'):
-            return
-        jid_dir = salt.utils.jid_dir(
-                load['jid'],
-                self.opts['cachedir'],
-                self.opts['hash_type']
-                )
-        if not os.path.isdir(jid_dir):
-            log.error(
-                'An inconsistency occurred, a job was received with a job id '
-                'that is not present on the master: {jid}'.format(**load)
-            )
-            return False
-        if os.path.exists(os.path.join(jid_dir, 'nocache')):
-            return
-        hn_dir = os.path.join(jid_dir, load['id'])
-        if not os.path.isdir(hn_dir):
-            os.makedirs(hn_dir)
-        # Otherwise the minion has already returned this jid and it should
-        # be dropped
-        else:
-            log.error(
-                'An extra return was detected from minion {0}, please verify '
-                'the minion, this could be a replay attack'.format(
-                    load['id']
-                )
-            )
-            return False
+        log.info('RET: {0}'.format(load))
 
-        self.serial.dump(
-            load['return'],
-            # Use atomic open here to avoid the file being read before it's
-            # completely written to. Refs #1935
-            salt.utils.atomicfile.atomic_open(
-                os.path.join(hn_dir, 'return.p'), 'w+'
-            )
-        )
-        if 'out' in load:
+        try:
+            if self.opts['master_ext_job_cache']:
+                fstr = '{0}.returner'.format(self.opts['master_ext_job_cache'])
+                self.mminion.returners[fstr](load)
+                return
+            if not self.opts['job_cache'] or self.opts.get('ext_job_cache'):
+                return
+            jid_dir = salt.utils.jid_dir(
+                    load['jid'],
+                    self.opts['cachedir'],
+                    self.opts['hash_type']
+                    )
+            if not os.path.isdir(jid_dir):
+                log.error(
+                    'An inconsistency occurred, a job was received with a job id '
+                    'that is not present on the master: {jid}'.format(**load)
+                )
+                return False
+            if os.path.exists(os.path.join(jid_dir, 'nocache')):
+                return
+            hn_dir = os.path.join(jid_dir, load['id'])
+            if not os.path.isdir(hn_dir):
+                os.makedirs(hn_dir)
+            # Otherwise the minion has already returned this jid and it should
+            # be dropped
+            else:
+                log.error(
+                    'An extra return was detected from minion {0}, please verify '
+                    'the minion, this could be a replay attack'.format(
+                        load['id']
+                    )
+                )
+                return False
+
             self.serial.dump(
-                load['out'],
-                # Use atomic open here to avoid the file being read before
-                # it's completely written to. Refs #1935
+                load['return'],
+                # Use atomic open here to avoid the file being read before it's
+                # completely written to. Refs #1935
                 salt.utils.atomicfile.atomic_open(
-                    os.path.join(hn_dir, 'out.p'), 'w+'
+                    os.path.join(hn_dir, 'return.p'), 'w+'
                 )
             )
+            if 'out' in load:
+                self.serial.dump(
+                    load['out'],
+                    # Use atomic open here to avoid the file being read before
+                    # it's completely written to. Refs #1935
+                    salt.utils.atomicfile.atomic_open(
+                        os.path.join(hn_dir, 'out.p'), 'w+'
+                    )
+                )
+        finally:
+            self.event.fire_event(load, load['jid'])
+            self.event.fire_ret_load(load)
 
     def _syndic_return(self, load):
         '''

@@ -200,9 +200,6 @@ class LocalClient(object):
         Returns a dict of (checked) pub_data or an empty dict.
         '''
         arg = condition_kwarg(arg, kwarg)
-        jid = ''
-
-        self.event.subscribe(jid)
 
         pub_data = self.pub(
             tgt,
@@ -210,9 +207,10 @@ class LocalClient(object):
             arg,
             expr_form,
             ret,
-            jid=jid,
             timeout=self._get_timeout(timeout),
             **kwargs)
+
+        self.event.subscribe(pub_data['jid'])
 
         return self._check_pub_data(pub_data)
 
@@ -518,6 +516,7 @@ class LocalClient(object):
         if not os.path.isdir(jid_dir):
             yield {}
         # Wait for the hosts to check in
+        last_time = False
         while True:
             for fn_ in os.listdir(jid_dir):
                 ret = {}
@@ -556,7 +555,7 @@ class LocalClient(object):
             if len(found.intersection(minions)) >= len(minions):
                 # All minions have returned, break out of the loop
                 break
-            if int(time.time()) > start + timeout:
+            if not last_time and int(time.time()) > start + timeout:
                 # The timeout has been reached, check the jid to see if the
                 # timeout needs to be increased
                 jinfo = self.gather_job_info(jid, tgt, tgt_type, **kwargs)
@@ -571,6 +570,11 @@ class LocalClient(object):
                 if more_time:
                     timeout += inc_timeout
                     continue
+                else:
+                    # Once more in case the job finished since we last checked
+                    last_time = True
+                    continue
+            elif last_time:
                 if verbose:
                     if tgt_type in ('glob', 'pcre', 'list'):
                         if len(found.intersection(minions)) >= len(minions):
@@ -605,6 +609,7 @@ class LocalClient(object):
         if timeout is None:
             timeout = self.opts['timeout']
         inc_timeout = timeout
+        evt_timeout = inc_timeout
         jid_dir = salt.utils.jid_dir(jid,
                                      self.opts['cachedir'],
                                      self.opts['hash_type'])
@@ -616,9 +621,12 @@ class LocalClient(object):
             yield {}
         # Wait for the hosts to check in
         syndic_wait = 0
+        last_time = False
         while True:
-            raw = self.event.get_event(timeout, jid)
+            before_event = int(time.time())
+            raw = self.event.get_event(evt_timeout, jid)
             if raw is not None and 'id' in raw:
+                evt_timeout = inc_timeout
                 if 'minions' in raw.get('data', {}):
                     minions.update(raw['data']['minions'])
                     continue
@@ -656,7 +664,7 @@ class LocalClient(object):
                 # The timeout +1 has not been reached and there is still a
                 # write tag for the syndic
                 continue
-            if int(time.time()) > start + timeout:
+            if not last_time and int(time.time()) >= start + timeout:
                 # The timeout has been reached, check the jid to see if the
                 # timeout needs to be increased
                 jinfo = self.gather_job_info(jid, tgt, tgt_type, **kwargs)
@@ -665,8 +673,15 @@ class LocalClient(object):
                     if jinfo[id_]:
                         more_time = True
                 if more_time:
+                    evt_timeout = inc_timeout
                     timeout += inc_timeout
                     continue
+                else:
+                    # Once more in case the job finished since we last checked
+                    last_time = True
+                    evt_timeout = 0
+                    continue
+            elif last_time:
                 break
             time.sleep(0.01)
 
@@ -886,6 +901,7 @@ class LocalClient(object):
         if timeout is None:
             timeout = self.opts['timeout']
         inc_timeout = timeout
+        evt_timeout = inc_timeout
         jid_dir = salt.utils.jid_dir(jid,
                                      self.opts['cachedir'],
                                      self.opts['hash_type'])
@@ -897,9 +913,13 @@ class LocalClient(object):
             yield {}
         # Wait for the hosts to check in
         syndic_wait = 0
+        last_time = False
         while True:
-            raw = self.event.get_event(timeout, jid)
+            raw = self.event.get_event(evt_timeout, jid)
             if raw is not None and 'id' in raw:
+                # Increase the timeouts
+                evt_timeout = inc_timeout
+                timeout += inc_timeout
                 if 'minions' in raw.get('data', {}):
                     minions.update(raw['data']['minions'])
                     continue
@@ -920,6 +940,7 @@ class LocalClient(object):
                             continue
                     break
                 continue
+
             # Then event system timeout was reached and nothing was returned
             if len(found.intersection(minions)) >= len(minions):
                 # All minions have returned, break out of the loop
@@ -933,7 +954,7 @@ class LocalClient(object):
                 # The timeout +1 has not been reached and there is still a
                 # write tag for the syndic
                 continue
-            if int(time.time()) > start + timeout:
+            if not last_time and int(time.time()) >= start + timeout:
                 # The timeout has been reached, check the jid to see if the
                 # timeout needs to be increased
                 jinfo = self.gather_job_info(jid, tgt, tgt_type, **kwargs)
@@ -946,8 +967,15 @@ class LocalClient(object):
                             )
                         more_time = True
                 if more_time:
+                    evt_timeout = inc_timeout
                     timeout += inc_timeout
                     continue
+                else:
+                    # Poll one last time for the event
+                    evt_timeout = 0
+                    last_time = True
+                    continue
+            elif last_time:
                 if verbose:
                     if tgt_type in ('glob', 'pcre', 'list'):
                         if len(found) < len(minions):

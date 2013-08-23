@@ -202,7 +202,7 @@ class SaltTestsuiteParser(SaltCoverageTestingParser):
         with TestDaemon(self):
             if self.options.name:
                 for name in self.options.name:
-                    results = self.run_suite('', name, load_from_name=True)
+                    results = self.run_suite('', name)#, load_from_name=True)
                     status.append(results)
             if self.options.runner:
                 status.append(self.run_integration_suite('runners', 'Runner'))
