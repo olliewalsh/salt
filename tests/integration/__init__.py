@@ -209,7 +209,6 @@ class TestDaemon(object):
             )
             minion_config['pki_dir'] = os.path.join(minion_config_dir, 'pki')
             minion_config['log_file'] = os.path.join(minion_config_dir, 'log')
-            minion_config['log_level_logfile'] = 'debug'
             del minion_config['conf_file']
             os.makedirs(minion_config_dir)
             minion_config_file = os.path.join(minion_config_dir, 'minion')
@@ -244,7 +243,6 @@ class TestDaemon(object):
             )
             sub_minion_config['pki_dir'] = os.path.join(sub_minion_config_dir, 'pki')
             sub_minion_config['log_file'] = os.path.join(sub_minion_config_dir, 'log')
-            sub_minion_config['log_level_logfile'] = 'debug'
             del sub_minion_config['conf_file']
             os.makedirs(sub_minion_config_dir)
             sub_minion_config_file = os.path.join(sub_minion_config_dir, 'minion')
@@ -340,16 +338,16 @@ class TestDaemon(object):
         import integration
         integration.SYNDIC = None
         if self.sub_minion_opts.get('processpool', False):
-            if self.sub_minion_process.poll() is None:
+            while self.sub_minion_process.poll() is None:
                 self.sub_minion_process.terminate()
-                self.sub_minion_process.wait()
+            self.sub_minion_process.wait()
         else:
             self.sub_minion_process.terminate()
             self.sub_minion_process.join()
         if self.minion_opts.get('processpool', False):
-            if self.minion_process.poll() is None:
+            while self.minion_process.poll() is None:
                 self.minion_process.terminate()
-                self.minion_process.wait()
+            self.minion_process.wait()
         else:
             self.minion_process.terminate()
             self.minion_process.join()

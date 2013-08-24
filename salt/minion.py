@@ -1372,6 +1372,7 @@ class MinionPool(MinionBase):
                 if self.poller.poll(loop_interval * 1000):
                     payload = self.crypticle.loads(self.socket.recv())
                     log.info(payload)
+
                     # Save dunderscore before
                     saved_mods = {}
                     for func in self.functions.itervalues():
@@ -1384,10 +1385,14 @@ class MinionPool(MinionBase):
                                         getattr(sys.modules[func.__module__], attr)
                                     )
                             saved_mods[func.__module__] = to_save
+                    
                     self._handle_worker_payload(payload)
+
+                    # Restore dunderscode
                     for saved_mod_name, saved_mod_attrs in saved_mods.iteritems():
                         for attr, value in saved_mod_attrs.iteritems():
                             setattr(sys.modules[saved_mod_name], attr, value)
+
                     self.minion_event.fire_event(data, 'pool-done')
                 elif time.time() > idle:
                     self.minion_event.fire_event(data, 'pool-idle')

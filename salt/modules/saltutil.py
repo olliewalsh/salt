@@ -357,8 +357,6 @@ def running():
     
     ret = []
     serial = salt.payload.Serial(__opts__)
-    pid = os.getpid()
-
     proc_dir = os.path.join(__opts__['cachedir'], 'proc')
     if not os.path.isdir(proc_dir):
         return []
@@ -370,7 +368,6 @@ def running():
             data = serial.loads(sdata)
             ret.append(data)
     else:
-        pid = os.getpid()
         procs = __salt__['status.procs']()
         for fn_ in os.listdir(proc_dir):
             path = os.path.join(proc_dir, fn_)
@@ -383,8 +380,6 @@ def running():
                 # The process is no longer running, clear out the file and
                 # continue
                 os.remove(path)
-                continue
-            if data.get('pid') == pid:
                 continue
             ret.append(data)
     return ret

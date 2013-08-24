@@ -7,6 +7,9 @@ import integration
 
 
 class DecoratorTest(integration.ModuleCase):
+    def setUp(self):
+        self.run_function('saltutil.sync_modules')
+
     def test_module(self):
         self.assertTrue(
                 self.run_function(

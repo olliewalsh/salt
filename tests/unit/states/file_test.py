@@ -17,14 +17,14 @@ except ImportError:
 
 if has_mock:
     import salt.states.file as filestate
-    filestate.__salt__ = {
-        'file.manage_file': False
-    }
-    filestate.__opts__ = {'test': False}
-
 
 @skipIf(has_mock is False, 'mock python module is unavailable')
 class TestFileState(TestCase):
+    def setUp(self):
+        filestate.__salt__ = {
+            'file.manage_file': False
+        }
+        filestate.__opts__ = {'test': False}
 
     def test_serialize(self):
         def returner(contents, *args, **kwargs):
