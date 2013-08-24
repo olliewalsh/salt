@@ -221,7 +221,7 @@ class TestDaemon(object):
             ]
             minion_env = copy.copy(os.environ)
             minion_env['PYTHONPATH']='{0}:{1}'.format(
-                CODE_DIR, ':'.join(sys.path[1:])
+                CODE_DIR, os.environ.get('PYTHONPATH','')
             )
             self.minion_process = subprocess.Popen(
                 minion_cmd,
@@ -261,7 +261,7 @@ class TestDaemon(object):
             ]
             sub_minion_env = copy.copy(os.environ)
             sub_minion_env['PYTHONPATH']='{0}:{1}'.format(
-                CODE_DIR, ':'.join(sys.path[1:])
+                CODE_DIR, os.environ.get('PYTHONPATH','')
             )
             self.sub_minion_process = subprocess.Popen(
                 sub_minion_cmd,
