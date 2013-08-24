@@ -100,7 +100,7 @@ class TestDaemon(object):
     '''
     Set up the master and minion daemons, and run related cases
     '''
-    MINIONS_CONNECT_TIMEOUT = MINIONS_SYNC_TIMEOUT = 240
+    MINIONS_CONNECT_TIMEOUT = MINIONS_SYNC_TIMEOUT = 120
 
     def __init__(self, parser):
         self.parser = parser
@@ -226,8 +226,8 @@ class TestDaemon(object):
             )
             self.minion_process = subprocess.Popen(
                 minion_cmd,
-                stdout=devnull,
-                stderr=devnull,
+                #stdout=devnull,
+                #stderr=devnull,
                 env=minion_env
             )
         else:
@@ -267,8 +267,8 @@ class TestDaemon(object):
             )
             self.sub_minion_process = subprocess.Popen(
                 sub_minion_cmd,
-                stdout=devnull,
-                stderr=devnull,
+                #stdout=devnull,
+                #stderr=devnull,
                 env=sub_minion_env
             )
         else:
@@ -536,7 +536,7 @@ class TestDaemon(object):
         expected_connections = set(targets)
         now = datetime.now()
         expire = now + timedelta(seconds=timeout)
-        time.sleep(30)
+        time.sleep(10)
         while now <= expire:
             sys.stdout.write('\r' + ' ' * PNUM + '\r')
             sys.stdout.write(
