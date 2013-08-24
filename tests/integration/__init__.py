@@ -100,7 +100,7 @@ class TestDaemon(object):
     '''
     Set up the master and minion daemons, and run related cases
     '''
-    MINIONS_CONNECT_TIMEOUT = MINIONS_SYNC_TIMEOUT = 120
+    MINIONS_CONNECT_TIMEOUT = MINIONS_SYNC_TIMEOUT = 240
 
     def __init__(self, parser):
         self.parser = parser
@@ -478,8 +478,8 @@ class TestDaemon(object):
         if os.path.isdir(TMP):
             shutil.rmtree(TMP)
 
-    def wait_for_jid(self, targets, jid, timeout=2400):
-        time.sleep(20)  # Allow some time for minions to accept jobs
+    def wait_for_jid(self, targets, jid, timeout=120):
+        time.sleep(1)  # Allow some time for minions to accept jobs
         now = datetime.now()
         expire = now + timedelta(seconds=timeout)
         job_finished = False
@@ -536,6 +536,7 @@ class TestDaemon(object):
         expected_connections = set(targets)
         now = datetime.now()
         expire = now + timedelta(seconds=timeout)
+        time.sleep(30)
         while now <= expire:
             sys.stdout.write('\r' + ' ' * PNUM + '\r')
             sys.stdout.write(
