@@ -198,10 +198,10 @@ class TestDaemon(object):
 
         if self.minion_opts.get('processpool', False):
             import yaml
-            from copy import deepcopy
+            import copy
             devnull = open('/dev/null' ,'w')
 
-            minion_config = deepcopy(self.minion_opts)
+            minion_config = copy.deepcopy(self.minion_opts)
             minion_config['user'] = pwd.getpwuid(os.getuid()).pw_name
             minion_config_dir =  os.path.join(
                 TMP,
@@ -219,10 +219,15 @@ class TestDaemon(object):
                 '-c',
                 minion_config_dir
             ]
+            minion_env = copy.copy(os.environ)
+            minion_env['PYTHONPATH']='{0}:{1}'.format(
+                CODE_DIR, ':'.join(sys.path[1:])
+            )
             self.minion_process = subprocess.Popen(
                 minion_cmd,
                 stdout=devnull,
-                stderr=devnull
+                stderr=devnull,
+                env=minion_env
             )
         else:
             minion = salt.minion.Minion(self.minion_opts)
@@ -231,11 +236,11 @@ class TestDaemon(object):
 
         if self.sub_minion_opts.get('processpool', False):
             import yaml
-            from copy import deepcopy
+            import copy
             devnull = open('/dev/null' ,'w')
 
 
-            sub_minion_config = deepcopy(self.sub_minion_opts)
+            sub_minion_config = copy.deepcopy(self.sub_minion_opts)
             sub_minion_config['user'] = pwd.getpwuid(os.getuid()).pw_name
             sub_minion_config_dir =  os.path.join(
                 TMP,
@@ -254,10 +259,15 @@ class TestDaemon(object):
                 '-c',
                 sub_minion_config_dir
             ]
+            sub_minion_env = copy.copy(os.environ)
+            sub_minion_env['PYTHONPATH']='{0}:{1}'.format(
+                CODE_DIR, ':'.join(sys.path[1:])
+            )
             self.sub_minion_process = subprocess.Popen(
                 sub_minion_cmd,
                 stdout=devnull,
-                stderr=devnull
+                stderr=devnull,
+                env=sub_minion_env
             )
         else:
             sub_minion = salt.minion.Minion(self.sub_minion_opts)
