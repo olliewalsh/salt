@@ -215,7 +215,7 @@ class TestDaemon(object):
             with open(minion_config_file, 'w') as config_file:
                 config_file.write(yaml.dump(minion_config))
             minion_cmd = [
-                sys.executable,
+                PYEXEC,
                 os.path.join(SCRIPT_DIR, 'salt-minion'),
                 '-c',
                 minion_config_dir
@@ -254,7 +254,7 @@ class TestDaemon(object):
                 config_file.write(yaml.dump(sub_minion_config))
 
             sub_minion_cmd = [
-                sys.executable,
+                PYEXEC,
                 os.path.join(SCRIPT_DIR, 'salt-minion'),
                 '-c',
                 sub_minion_config_dir
