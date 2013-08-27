@@ -68,7 +68,7 @@ def is_temp_logging_configured():
     return __TEMP_LOGGING_CONFIGURED
 
 
-if not hasattr(logging, 'NullHandler'):
+if not hasattr(Logging, 'NullHandler'):
     # Since the NullHandler is only available on python >= 2.7, here's a copy
     class NullHandler(logging.Handler):
         '''
