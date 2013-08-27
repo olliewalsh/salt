@@ -224,8 +224,8 @@ class TestDaemon(object):
             minion_env['PYTHONPATH']=':'.join(sys.path)
             self.minion_process = subprocess.Popen(
                 minion_cmd,
-                #stdout=devnull,
-                #stderr=devnull,
+                stdout=devnull,
+                stderr=devnull,
                 env=minion_env
             )
         else:
@@ -263,8 +263,8 @@ class TestDaemon(object):
             minion_env['PYTHONPATH']=':'.join(sys.path)
             self.sub_minion_process = subprocess.Popen(
                 sub_minion_cmd,
-                #stdout=devnull,
-                #stderr=devnull,
+                stdout=devnull,
+                stderr=devnull,
                 env=sub_minion_env
             )
         else:
