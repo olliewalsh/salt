@@ -221,10 +221,11 @@ class TestDaemon(object):
                 minion_config_dir
             ]
             minion_env = copy.copy(os.environ)
-            minion_env['PYTHONPATH']=':'.join(sys.path)
+            minion_env['SALT_PYTHONPATH']=':'.join(sys.path)
             self.minion_process = subprocess.Popen(
                 minion_cmd,
-                env=minion_env
+                env=minion_env,
+                close_fds=True
             )
         else:
             minion = salt.minion.Minion(self.minion_opts)
@@ -258,10 +259,11 @@ class TestDaemon(object):
                 sub_minion_config_dir
             ]
             sub_minion_env = copy.copy(os.environ)
-            minion_env['PYTHONPATH']=':'.join(sys.path)
+            minion_env['SALT_PYTHONPATH']=':'.join(sys.path)
             self.sub_minion_process = subprocess.Popen(
                 sub_minion_cmd,
-                env=sub_minion_env
+                env=sub_minion_env,
+                close_fds=True
             )
         else:
             sub_minion = salt.minion.Minion(self.sub_minion_opts)
