@@ -226,9 +226,6 @@ class TestDaemon(object):
                 minion_cmd,
                 env=minion_env
             )
-            self.minion_process = subprocess.Popen(
-                minion_cmd
-            )
         else:
             minion = salt.minion.Minion(self.minion_opts)
             self.minion_process = multiprocessing.Process(target=minion.tune_in)
@@ -262,10 +259,10 @@ class TestDaemon(object):
             ]
             sub_minion_env = copy.copy(os.environ)
             minion_env['PYTHONPATH']=':'.join(sys.path)
-             self.sub_minion_process = subprocess.Popen(
+            self.sub_minion_process = subprocess.Popen(
                 sub_minion_cmd,
                 env=sub_minion_env
-             )
+            )
         else:
             sub_minion = salt.minion.Minion(self.sub_minion_opts)
             self.sub_minion_process = multiprocessing.Process(
