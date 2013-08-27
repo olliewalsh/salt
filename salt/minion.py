@@ -1287,7 +1287,10 @@ class MinionPool(MinionBase):
             self.__busy_workers[pid] = worker
             
     def _start_worker(self):
-        cmd = sys.argv + ['--worker']
+        if sys.argv[0].endswith('.exe'):
+            cmd = sys.argv + ['--worker']
+        else:
+            cmd = [sys.executable] + sys.argv + ['--worker']
         log.info(cmd)
         proc = subprocess.Popen(cmd)
         self.__pending_workers[proc.pid] = MinionWorker(self.context, proc)

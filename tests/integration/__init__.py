@@ -215,18 +215,13 @@ class TestDaemon(object):
             with open(minion_config_file, 'w') as config_file:
                 config_file.write(yaml.dump(minion_config))
             minion_cmd = [
-                PYEXEC,
+                sys.executable,
                 os.path.join(SCRIPT_DIR, 'salt-minion'),
                 '-c',
                 minion_config_dir
             ]
-            minion_env = copy.copy(os.environ)
-            minion_env['PYTHONPATH']=':'.join(sys.path)
             self.minion_process = subprocess.Popen(
-                minion_cmd,
-                #stdout=devnull,
-                #stderr=devnull,
-                env=minion_env
+                minion_cmd
             )
         else:
             minion = salt.minion.Minion(self.minion_opts)
@@ -254,18 +249,13 @@ class TestDaemon(object):
                 config_file.write(yaml.dump(sub_minion_config))
 
             sub_minion_cmd = [
-                PYEXEC,
+                sys.executable,
                 os.path.join(SCRIPT_DIR, 'salt-minion'),
                 '-c',
                 sub_minion_config_dir
             ]
-            sub_minion_env = copy.copy(os.environ)
-            minion_env['PYTHONPATH']=':'.join(sys.path)
             self.sub_minion_process = subprocess.Popen(
-                sub_minion_cmd,
-                #stdout=devnull,
-                #stderr=devnull,
-                env=sub_minion_env
+                sub_minion_cmd
             )
         else:
             sub_minion = salt.minion.Minion(self.sub_minion_opts)
