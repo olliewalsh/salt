@@ -47,6 +47,13 @@ class SaltTestsuiteParser(SaltCoverageTestingParser):
             help='Print some system information.'
         )
 
+        self.add_option(
+            '--envinfo',
+            default=False,
+            action='store_true',
+            help='Print environment variables.'
+        )
+
         self.test_selection_group.add_option(
             '-m',
             '--module',

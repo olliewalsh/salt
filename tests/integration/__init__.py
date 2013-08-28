@@ -315,6 +315,11 @@ class TestDaemon(object):
         self.pre_setup_minions()
         self.setup_minions()
 
+        if self.parser.options.envinfo:
+            print_header('~~~~~~~ Environment Report ', inline=True)
+            for k, v in os.environ.iteritems():
+                print('{0} = {1}\n'.format(k, v))
+
         if self.parser.options.sysinfo:
             from salt import version
             print_header('~~~~~~~ Versions Report ', inline=True)
