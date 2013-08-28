@@ -25,8 +25,8 @@ class GitTest(integration.ModuleCase, integration.SaltReturnAssertsMixIn):
         self.__domain = 'github.com'
         try:
             if hasattr(socket, 'setdefaulttimeout'):
-                # 10 second dns timeout
-                socket.setdefaulttimeout(10)
+                # 30 second dns timeout
+                socket.setdefaulttimeout(30)
             socket.gethostbyname(self.__domain)
         except socket.error:
             msg = 'error resolving {0}, possible network issue?'
