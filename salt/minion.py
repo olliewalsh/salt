@@ -1292,9 +1292,7 @@ class MinionPool(MinionBase):
         else:
             cmd = [sys.executable] + sys.argv + ['--worker']
         log.info(cmd)
-        minion_env = copy.copy(os.environ)
-        minion_env['SALT_PYTHONPATH'] = ':'.join(sys.path)
-        proc = subprocess.Popen(cmd, env=minion_env)
+        proc = subprocess.Popen(cmd)
         self.__pending_workers[proc.pid] = MinionWorker(self.context, proc)
 
     def tune_in_worker(self):

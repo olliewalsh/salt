@@ -2,6 +2,8 @@
 '''
 This script is used to kick off a salt minion daemon
 '''
+import sys
+sys.path = sys.path[1:]
 
 from salt.scripts import salt_minion
 from multiprocessing import freeze_support
