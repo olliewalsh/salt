@@ -318,7 +318,7 @@ class TestDaemon(object):
         if self.parser.options.envinfo:
             print_header('~~~~~~~ Environment Report ', inline=True)
             for k, v in os.environ.iteritems():
-                print('{0} = {1}\n'.format(k, v))
+                print('{0} = {1}'.format(k, v))
 
         if self.parser.options.sysinfo:
             from salt import version
