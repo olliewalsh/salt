@@ -28,7 +28,7 @@ def salt_minion():
     # Remove and env vars that could conflict with subprocesses
     for var in (
         # Strip vars that can mess with system python
-        'PYTHONPATH', 'PYTHONHOME','VIRTUALENV'
+        'PYTHONPATH', 'PYTHONHOME','VIRTUALENV',
         # Strip vars that may change the output of system commands
         # E.g ps truncates the output to the number of columns
         'COLUMNS','LINES','TERM',
