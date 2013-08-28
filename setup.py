@@ -257,6 +257,7 @@ freezer_includes = [
     'distutils.version',
     'numbers',
     'json',
+    'sqlite'
 ]
 
 if sys.platform.startswith('win'):
