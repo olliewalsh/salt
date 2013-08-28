@@ -1416,6 +1416,7 @@ class MinionPool(MinionBase):
                     'An exception occurred while polling the minion',
                     exc_info=True
                 )
+                raise
 
     def __return_pub(self, ret, ret_cmd='_return'):
         super(MinionPool, self)._return_pub(ret, ret_cmd)
