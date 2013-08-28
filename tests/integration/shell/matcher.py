@@ -45,12 +45,12 @@ class MatchTest(integration.ShellCase, integration.ShellCaseCommonTestsMixIn):
         self.assertIn('minion', data)
         self.assertNotIn('sub_minion', data)
         match = 'P@test_grain:^cheese$ and * and G@test_grain:cheese'
-        data = self.run_salt('-t 1 -C \'{0}\' test.ping'.format(match))
+        data = self.run_salt('-t 3 -C \'{0}\' test.ping'.format(match))
         data = '\n'.join(data)
         self.assertIn('minion', data)
         self.assertNotIn('sub_minion', data)
         match = 'L@sub_minion and E@.*'
-        data = self.run_salt('-t 1 -C "{0}" test.ping'.format(match))
+        data = self.run_salt('-t 3 -C "{0}" test.ping'.format(match))
         data = '\n'.join(data)
         self.assertIn('sub_minion', data)
         self.assertNotIn('minion', data.replace('sub_minion', 'stub'))
@@ -86,7 +86,7 @@ class MatchTest(integration.ShellCase, integration.ShellCaseCommonTestsMixIn):
         test salt grain matcher
         '''
         # First-level grain (string value)
-        data = self.run_salt('-t 1 -G "test_grain:cheese" test.ping')
+        data = self.run_salt('-t 3 -G "test_grain:cheese" test.ping')
         data = '\n'.join(data)
         self.assertIn('minion', data)
         self.assertNotIn('sub_minion', data)
@@ -95,7 +95,7 @@ class MatchTest(integration.ShellCase, integration.ShellCaseCommonTestsMixIn):
         self.assertIn('sub_minion', data)
         self.assertNotIn('minion', data.replace('sub_minion', 'stub'))
         # First-level grain (list member)
-        data = self.run_salt('-t 1 -G "planets:earth" test.ping')
+        data = self.run_salt('-t 3 -G "planets:earth" test.ping')
         data = '\n'.join(data)
         self.assertIn('minion', data)
         self.assertNotIn('sub_minion', data)
@@ -110,7 +110,7 @@ class MatchTest(integration.ShellCase, integration.ShellCaseCommonTestsMixIn):
             'assigned.'
         )
         # Nested grain (string value)
-        data = self.run_salt('-t 1 -G "level1:level2:foo" test.ping')
+        data = self.run_salt('-t 3 -G "level1:level2:foo" test.ping')
         data = '\n'.join(data)
         self.assertIn('minion', data)
         self.assertNotIn('sub_minion', data)
@@ -119,7 +119,7 @@ class MatchTest(integration.ShellCase, integration.ShellCaseCommonTestsMixIn):
         self.assertIn('sub_minion', data)
         self.assertNotIn('minion', data.replace('sub_minion', 'stub'))
         # Nested grain (list member)
-        data = self.run_salt('-t 1 -G "companions:one:ian" test.ping')
+        data = self.run_salt('-t 3 -G "companions:one:ian" test.ping')
         data = '\n'.join(data)
         self.assertIn('minion', data)
         self.assertNotIn('sub_minion', data)
@@ -133,7 +133,7 @@ class MatchTest(integration.ShellCase, integration.ShellCaseCommonTestsMixIn):
         test salt grain matcher
         '''
         data = self.run_salt(
-            '-t 1 --grain-pcre "test_grain:^cheese$" test.ping'
+            '-t 3 --grain-pcre "test_grain:^cheese$" test.ping'
         )
         data = '\n'.join(data)
         self.assertIn('minion', data)

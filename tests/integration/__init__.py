@@ -228,7 +228,8 @@ class TestDaemon(object):
             self.minion_process = subprocess.Popen(
                 minion_cmd,
                 env=minion_env,
-                close_fds=True
+                stdout=devnull,
+                stderr=subprocess.STDOUT
             )
         else:
             minion = salt.minion.Minion(self.minion_opts)
@@ -269,7 +270,8 @@ class TestDaemon(object):
             self.sub_minion_process = subprocess.Popen(
                 sub_minion_cmd,
                 env=sub_minion_env,
-                close_fds=True
+                stdout=devnull,
+                stderr=subprocess.STDOUT
             )
         else:
             sub_minion = salt.minion.Minion(self.sub_minion_opts)
