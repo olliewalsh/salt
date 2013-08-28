@@ -3,13 +3,6 @@
 Execute a salt convenience routine
 '''
 
-import os
-import sys
-try:
-	sys.path = os.environ['SALT_PYTHONPATH'].split(os.pathsep) + sys.path
-except KeyError:
-	pass
-
 from salt.scripts import salt_run
 
 

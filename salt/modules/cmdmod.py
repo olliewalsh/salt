@@ -287,6 +287,18 @@ def _run(cmd,
 
     else:
         run_env = os.environ.copy()
+        # Remove and env vars that could conflict with subprocesses
+        for var in (
+            # Strip vars that can mess with system python
+            'PYTHONPATH', 'PYTHONHOME',
+            # Strip vars that may change the output of system commands
+            # E.g ps truncates the output to the number of columns
+            'COLUMNS','LINES','TERM',
+                ):
+            try:
+                del run_env[var]
+            except KeyError:
+                pass
         run_env.update(env)
 
     kwargs = {'cwd': cwd,

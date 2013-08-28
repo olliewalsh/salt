@@ -221,7 +221,7 @@ class TestDaemon(object):
                 minion_config_dir
             ]
             minion_env = copy.copy(os.environ)
-            minion_env['SALT_PYTHONPATH'] = '{0}:{1}'.format(
+            minion_env['PYTHONPATH'] = '{0}:{1}'.format(
                 CODE_DIR,
                 ':'.join(sys.path[1:])
             )
@@ -263,7 +263,7 @@ class TestDaemon(object):
                 sub_minion_config_dir
             ]
             sub_minion_env = copy.copy(os.environ)
-            sub_minion_env['SALT_PYTHONPATH'] = '{0}:{1}'.format(
+            sub_minion_env['PYTHONPATH'] = '{0}:{1}'.format(
                 CODE_DIR,
                 ':'.join(sys.path[1:])
             )
