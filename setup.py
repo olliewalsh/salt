@@ -254,6 +254,7 @@ freezer_includes = [
     'distutils.version',
     'numbers',
     'json',
+    'sqlite3'
 ]
 
 if sys.platform.startswith('win'):
@@ -267,6 +268,13 @@ if sys.platform.startswith('win'):
         'wmi',
     ])
     setup_kwargs['install_requires'].append('WMI')
+
+    # Add zmq location to path for bbfreeze
+    import zmq
+    os.environ['PATH'] = '{0};{1}'.format(
+        os.path.dirname(zmq.__file__),
+        os.environ['PATH']
+    )
 elif sys.platform.startswith('linux'):
     freezer_includes.append('spwd')
     try:

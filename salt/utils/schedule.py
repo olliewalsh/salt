@@ -21,8 +21,7 @@ This will schedule the command: state.sls httpd test=True every 3600 seconds
 # Import python libs
 import time
 import datetime
-import multiprocessing
-import threading
+import os
 import sys
 import logging
 
@@ -63,13 +62,9 @@ class Schedule(object):
         '''
         Execute this method in a multiprocess or thread
         '''
-        if salt.utils.is_windows():
-            self.functions = salt.loader.minion_mods(self.opts)
-            self.returners = salt.loader.returners(self.opts, self.functions)
         ret = {'id': self.opts.get('id', 'master'),
                'fun': func,
                'jid': '{0:%Y%m%d%H%M%S%f}'.format(datetime.datetime.now())}
-        salt.utils.daemonize_if(self.opts)
         if 'args' in data:
             if 'kwargs' in data:
                 ret['return'] = self.functions[func](
@@ -105,6 +100,15 @@ class Schedule(object):
                         func, returner
                         )
                     )
+
+    def _run(self, func, data):
+        pid = os.fork()
+        if pid == 0:
+            salt.utils.daemonize()
+            self.handle_func(func, data)
+            exit(0)
+        else:
+            os.waitpid(pid, 0)
 
     def eval(self):
         '''
@@ -153,12 +157,19 @@ class Schedule(object):
             else:
                 log.debug('Running scheduled job: {0}'.format(job))
 
-            if self.opts.get('multiprocessing', True):
-                thread_cls = multiprocessing.Process
-            else:
-                thread_cls = threading.Thread
-            proc = thread_cls(target=self.handle_func, args=(func, data))
-            proc.start()
-            if self.opts.get('multiprocessing', True):
-                proc.join()
+            self._run(func, data)
+
             self.intervals[job] = int(time.time())
+
+class MinionPoolSchedule(Schedule):
+    def __init__(self, minion, intervals=None):
+        super(MinionPoolSchedule, self).__init__(
+            minion.opts,
+            minion.functions,
+            minion.returners,
+            intervals)
+        self.minion = minion
+
+    def _run(self, func, data):
+        self.minion._handle_decoded_payload({'fun':'schedule_run', 'args':[func, data]})
+

@@ -159,7 +159,7 @@ def get_colors(use=True):
     return colors
 
 
-def daemonize():
+def daemonize(redirect_fds=False):
     '''
     Daemonize a process
     '''
@@ -192,14 +192,11 @@ def daemonize():
         )
         sys.exit(1)
 
-    # A normal daemonization redirects the process output to /dev/null.
-    # Unfortunately when a python multiprocess is called the output is
-    # not cleanly redirected and the parent process dies when the
-    # multiprocessing process attempts to access stdout or err.
-    #dev_null = open('/dev/null', 'rw')
-    #os.dup2(dev_null.fileno(), sys.stdin.fileno())
-    #os.dup2(dev_null.fileno(), sys.stdout.fileno())
-    #os.dup2(dev_null.fileno(), sys.stderr.fileno())
+    if redirect_fds:
+        dev_null = open('/dev/null', 'rw')
+        os.dup2(dev_null.fileno(), sys.stdin.fileno())
+        os.dup2(dev_null.fileno(), sys.stdout.fileno())
+        os.dup2(dev_null.fileno(), sys.stderr.fileno())
 
 
 def daemonize_if(opts):
@@ -209,9 +206,9 @@ def daemonize_if(opts):
     '''
     if 'salt-call' in sys.argv[0]:
         return
-    if not opts.get('multiprocessing', True):
+    if not hasattr(os, 'fork'):
         return
-    if sys.platform.startswith('win'):
+    if opts.get('processpool', False):
         return
     daemonize()
 
@@ -416,23 +413,21 @@ def prep_jid(cachedir, sum_type, user='root', nocache=False):
     '''
     Return a job id and prepare the job id directory
     '''
-    jid = '{0:%Y%m%d%H%M%S%f}'.format(datetime.datetime.now())
+    while True:
+        jid = '{0:%Y%m%d%H%M%S%f}'.format(datetime.datetime.now())
 
-    jid_dir_ = jid_dir(jid, cachedir, sum_type)
-    if not os.path.isdir(jid_dir_):
-        if os.path.exists(jid_dir_):
-            # Somehow we ended up with a file at our jid destination.
-            # Delete it.
-            os.remove(jid_dir_)
-        os.makedirs(jid_dir_)
+        jid_dir_ = jid_dir(jid, cachedir, sum_type)
+        try:
+            os.makedirs(jid_dir_)
+        except OSError:
+            # Duplicate jid, try again
+            continue
         with fopen(os.path.join(jid_dir_, 'jid'), 'w+') as fn_:
             fn_.write(jid)
         if nocache:
             with fopen(os.path.join(jid_dir_, 'nocache'), 'w+') as fn_:
                 fn_.write('')
-    else:
-        return prep_jid(cachedir, sum_type, user=user, nocache=nocache)
-    return jid
+        return jid
 
 
 def jid_dir(jid, cachedir, sum_type):

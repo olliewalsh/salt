@@ -178,8 +178,9 @@ class Minion(parsers.MinionOptionParser):
         # waiting for it, if we daemonize later then the minion could halt
         # the boot process waiting for a key to be accepted on the master.
         # This is the latest safe place to daemonize
-        self.daemonize_if_required()
-        self.set_pidfile()
+        if not self.options.worker:
+            self.daemonize_if_required()
+            self.set_pidfile()
         if isinstance(self.config.get('master'), list):
             self.minion = salt.minion.MultiMinion(self.config)
         else:
@@ -198,7 +199,10 @@ class Minion(parsers.MinionOptionParser):
         self.prepare()
         try:
             if check_user(self.config['user']):
-                self.minion.tune_in()
+                if self.options.worker:
+                    self.minion.tune_in_worker()
+                else:
+                    self.minion.tune_in()
         except (KeyboardInterrupt, SaltSystemExit) as e:
             logger.warn('Stopping the Salt Minion')
             if isinstance(e, KeyboardInterrupt):

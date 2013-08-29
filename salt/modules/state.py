@@ -71,14 +71,15 @@ def running():
     ret = []
     active = __salt__['saltutil.is_running']('state.*')
     for data in active:
-        err = ('The function "{0}" is running as PID {1} and was started at '
-               '{2} with jid {3}').format(
-                data['fun'],
-                data['pid'],
-                salt.utils.jid_to_time(data['jid']),
-                data['jid'],
-                )
-        ret.append(err)
+        if data['pid'] != os.getpid():
+            err = ('The function "{0}" is running as PID {1} and was started at '
+                   '{2} with jid {3}').format(
+                    data['fun'],
+                    data['pid'],
+                    salt.utils.jid_to_time(data['jid']),
+                    data['jid'],
+                    )
+            ret.append(err)
     return ret
 
 

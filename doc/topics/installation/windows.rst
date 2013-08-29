@@ -175,7 +175,6 @@ Install on Windows XP 32bit
         cachedir: /var/cache/salt
         renderer: yaml_jinja
         open_mode: False
-        multiprocessing: False
 
 22.  Start the salt-minion
 

@@ -71,7 +71,7 @@ VALID_OPTS = {
     'providers': dict,
     'clean_dynamic_modules': bool,
     'open_mode': bool,
-    'multiprocessing': bool,
+    'processpool': bool,
     'mine_interval': int,
     'ipc_mode': str,
     'ipv6': bool,
