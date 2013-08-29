@@ -19,8 +19,10 @@ class SupervisordModuleTest(integration.ModuleCase):
         self.venv_dir = os.path.join(self.venv_test_dir, 'venv')
         self.supervisor_sock = os.path.join(self.venv_dir, 'supervisor.sock')
 
-        if not os.path.exists(self.venv_dir):
+        if not os.path.exists(self.venv_test_dir):
             os.makedirs(self.venv_test_dir)
+        
+        if not os.path.exists(self.venv_dir):
             self.run_function('virtualenv.create', [self.venv_dir])
             self.run_function('pip.install', [], pkgs='supervisor', bin_env=self.venv_dir)
 
@@ -30,13 +32,22 @@ class SupervisordModuleTest(integration.ModuleCase):
         self.supervisor_conf = os.path.join(self.venv_dir, 'supervisor.conf')
 
     def start_supervisord(self, autostart=True):
+        programs = {
+            'sleep_service':{
+                'command':'sleep 600',
+                'autostart':'true' if autostart else 'false',
+            },
+            'sleep_service2':{
+                'command':'sleep 600',
+                'autostart':'true' if autostart else 'false',
+            }
+        }
         ret = self.run_state(
             'file.managed', name=self.supervisor_conf, source='salt://supervisor.conf',
             template='jinja',
             context={
-                'supervisor_sock' : self.supervisor_sock,
                 'virtual_env' : self.venv_dir,
-                'autostart': autostart
+                'programs': programs
             }
         )
         if not os.path.exists(self.supervisor_conf):
