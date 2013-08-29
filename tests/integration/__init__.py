@@ -208,15 +208,89 @@ class TestDaemon(object):
         self.master_process = multiprocessing.Process(target=master.start)
         self.master_process.start()
 
-        minion = salt.minion.Minion(self.minion_opts)
-        self.minion_process = multiprocessing.Process(target=minion.tune_in)
-        self.minion_process.start()
+        if self.minion_opts.get('processpool', False):
+            import yaml
+            import copy
+            devnull = open('/dev/null' ,'w')
 
-        sub_minion = salt.minion.Minion(self.sub_minion_opts)
-        self.sub_minion_process = multiprocessing.Process(
-            target=sub_minion.tune_in
-        )
-        self.sub_minion_process.start()
+            minion_config = copy.deepcopy(self.minion_opts)
+            minion_config['user'] = pwd.getpwuid(os.getuid()).pw_name
+            minion_config_dir =  os.path.join(
+                TMP,
+                'main_minion'
+            )
+            minion_config['pki_dir'] = os.path.join(minion_config_dir, 'pki')
+            minion_config['log_file'] = os.path.join(minion_config_dir, 'log')
+            del minion_config['conf_file']
+            os.makedirs(minion_config_dir)
+            minion_config_file = os.path.join(minion_config_dir, 'minion')
+            with open(minion_config_file, 'w') as config_file:
+                config_file.write(yaml.dump(minion_config))
+            minion_cmd = [
+                sys.executable,
+                os.path.join(SCRIPT_DIR, 'salt-minion'),
+                '-c',
+                minion_config_dir
+            ]
+            minion_env = copy.copy(os.environ)
+            minion_env['PYTHONPATH'] = '{0}:{1}'.format(
+                CODE_DIR,
+                ':'.join(sys.path[1:])
+            )
+            self.minion_process = subprocess.Popen(
+                minion_cmd,
+                env=minion_env,
+                stdout=devnull,
+                stderr=subprocess.STDOUT
+            )
+        else:
+            minion = salt.minion.Minion(self.minion_opts)
+            self.minion_process = multiprocessing.Process(target=minion.tune_in)
+            self.minion_process.start()
+
+        if self.sub_minion_opts.get('processpool', False):
+            import yaml
+            import copy
+            devnull = open('/dev/null' ,'w')
+
+
+            sub_minion_config = copy.deepcopy(self.sub_minion_opts)
+            sub_minion_config['user'] = pwd.getpwuid(os.getuid()).pw_name
+            sub_minion_config_dir =  os.path.join(
+                TMP,
+                'sub_minion'
+            )
+            sub_minion_config['pki_dir'] = os.path.join(sub_minion_config_dir, 'pki')
+            sub_minion_config['log_file'] = os.path.join(sub_minion_config_dir, 'log')
+            del sub_minion_config['conf_file']
+            os.makedirs(sub_minion_config_dir)
+            sub_minion_config_file = os.path.join(sub_minion_config_dir, 'minion')
+            with open(sub_minion_config_file, 'w') as config_file:
+                config_file.write(yaml.dump(sub_minion_config))
+
+            sub_minion_cmd = [
+                sys.executable,
+                os.path.join(SCRIPT_DIR, 'salt-minion'),
+                '-c',
+                sub_minion_config_dir
+            ]
+            sub_minion_env = copy.copy(os.environ)
+            sub_minion_env['PYTHONPATH'] = '{0}:{1}'.format(
+                CODE_DIR,
+                ':'.join(sys.path[1:])
+            )
+            self.sub_minion_process = subprocess.Popen(
+                sub_minion_cmd,
+                env=sub_minion_env,
+                stdout=devnull,
+                stderr=subprocess.STDOUT
+            )
+        else:
+            sub_minion = salt.minion.Minion(self.sub_minion_opts)
+            self.sub_minion_process = multiprocessing.Process(
+                target=sub_minion.tune_in
+            )
+            self.sub_minion_process.start()
 
         smaster = salt.master.Master(self.smaster_opts)
         self.smaster_process = multiprocessing.Process(target=smaster.start)

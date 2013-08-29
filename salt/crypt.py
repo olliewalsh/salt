@@ -349,6 +349,10 @@ class Auth(object):
 
         sreq = salt.payload.SREQ(
             self.opts['master_uri'],
+            '{0}_{1}_auth'.format(
+                self.opts.get('id', ''),
+                os.getpid()
+            )
         )
         try:
             payload = sreq.send_auto(

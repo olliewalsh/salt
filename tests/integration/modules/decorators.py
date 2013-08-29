@@ -4,9 +4,14 @@ ensure_in_syspath('../../')
 
 # Import salt libs
 import integration
+import time
 
 
 class DecoratorTest(integration.ModuleCase):
+    def setUp(self):
+        self.run_function('saltutil.sync_modules')
+        time.sleep(5)
+
     def test_module(self):
         self.assertTrue(
                 self.run_function(

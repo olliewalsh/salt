@@ -6,7 +6,6 @@ Routines to set up a minion
 # Import python libs
 import logging
 import getpass
-import multiprocessing
 import fnmatch
 import copy
 import os
@@ -14,10 +13,12 @@ import hashlib
 import re
 import types
 import threading
+import subprocess
 import time
 import traceback
 import sys
 import signal
+import sqlite3
 from random import randint
 
 # Import third party libs
@@ -476,12 +477,7 @@ class MultiMinion(object):
                     minion['minion'].pillar_refresh()
                 minion['generator'].next()
 
-
-class Minion(object):
-    '''
-    This class instantiates a minion, runs connections for a minion,
-    and loads all of the functions into the minion
-    '''
+class MinionBase(object):
     def __init__(self, opts, timeout=60, safe=True):
         '''
         Pass in the options dict
@@ -508,25 +504,7 @@ class Minion(object):
             opts['environment'],
         ).compile_pillar()
         self.serial = salt.payload.Serial(self.opts)
-        self.mod_opts = self.__prep_mod_opts()
         self.functions, self.returners = self.__load_modules()
-        self.matcher = Matcher(self.opts, self.functions)
-        self.proc_dir = get_proc_dir(opts['cachedir'])
-        self.schedule = salt.utils.schedule.Schedule(
-            self.opts,
-            self.functions,
-            self.returners)
-
-    def __prep_mod_opts(self):
-        '''
-        Returns a copy of the opts with key bits stripped out
-        '''
-        mod_opts = {}
-        for key, val in self.opts.items():
-            if key == 'logger':
-                continue
-            mod_opts[key] = val
-        return mod_opts
 
     def __load_modules(self):
         '''
@@ -569,7 +547,7 @@ class Minion(object):
          'clear': self._handle_clear}[payload['enc']](payload['load'],
                                                       payload['sig'] if 'sig' in payload else None)
 
-    def _handle_aes(self, load, sig=None):
+    def _handle_aes(self, load):
         '''
         Takes the AES encrypted load, checks the signature if pub signatures
         are turned on, decrypts it, and runs the encapsulated instructions
@@ -671,52 +649,24 @@ class Minion(object):
                 self.functions, self.returners = self.__load_modules()
                 self.schedule.functions = self.functions
                 self.schedule.returners = self.returners
-        if isinstance(data['fun'], tuple) or isinstance(data['fun'], list):
-            target = Minion._thread_multi_return
-        else:
-            target = Minion._thread_return
-        # We stash an instance references to allow for the socket
-        # communication in Windows. You can't pickle functions, and thus
-        # python needs to be able to reconstruct the reference on the other
-        # side.
-        instance = self
-        if self.opts['multiprocessing']:
-            if sys.platform.startswith('win'):
-                # let python reconstruct the minion on the other side if we're
-                # running on windows
-                instance = None
-            process = multiprocessing.Process(
-                target=target, args=(instance, self.opts, data)
-            )
-        else:
-            process = threading.Thread(
-                target=target, args=(instance, self.opts, data)
-            )
-        process.start()
-        process.join()
+        self._run(data)
 
-    @classmethod
-    def _thread_return(cls, minion_instance, opts, data):
+    def _run(self, data):
+        '''This must be overridden in the minion subclass'''
+        pass
+
+
+    def _thread_return(self, data):
         '''
         This method should be used as a threading target, start the actual
         minion side execution.
         '''
-        # this seems awkward at first, but it's a workaround for Windows
-        # multiprocessing communication.
-        if not minion_instance:
-            minion_instance = cls(opts)
-        if opts['multiprocessing']:
-            fn_ = os.path.join(minion_instance.proc_dir, data['jid'])
-            salt.utils.daemonize_if(opts)
-            sdata = {'pid': os.getpid()}
-            sdata.update(data)
-            with salt.utils.fopen(fn_, 'w+') as fp_:
-                fp_.write(minion_instance.serial.dumps(sdata))
-        ret = {'success': False}
+        ret = {}
         function_name = data['fun']
-        if function_name in minion_instance.functions:
+        if function_name in self.functions:
+            ret['success'] = False
             try:
-                func = minion_instance.functions[data['fun']]
+                func = self.functions[data['fun']]
                 args, kwargs = parse_args_and_kwargs(func, data['arg'], data)
                 sys.modules[func.__module__].__context__['retcode'] = 0
                 return_data = func(*args, **kwargs)
@@ -731,7 +681,7 @@ class Minion(object):
                                 iret = []
                             iret.append(single)
                         tag = tagify([data['jid'], 'ret', opts['id'], ind])
-                        minion_instance._fire_master({'return': single}, tag)
+                        self._fire_master({'return': single}, tag)
                         ind += 1
                     ret['return'] = iret
                 else:
@@ -758,7 +708,7 @@ class Minion(object):
             except TypeError as exc:
                 trb = traceback.format_exc()
                 aspec = salt.utils.get_function_argspec(
-                    minion_instance.functions[data['fun']]
+                    self.functions[data['fun']]
                 )
                 msg = ('TypeError encountered executing {0}: {1}. See '
                        'debug log for more info.  Possibly a missing '
@@ -780,12 +730,11 @@ class Minion(object):
 
         ret['jid'] = data['jid']
         ret['fun'] = data['fun']
-        minion_instance._return_pub(ret)
         if data['ret']:
-            ret['id'] = opts['id']
             for returner in set(data['ret'].split(',')):
+                ret['id'] = self.opts['id']
                 try:
-                    minion_instance.returners['{0}.returner'.format(
+                    self.returners['{0}.returner'.format(
                         returner
                     )](ret)
                 except Exception as exc:
@@ -795,17 +744,21 @@ class Minion(object):
                         exc
                         )
                     )
+        try:
+            if hasattr(self.functions[ret['fun']], '__outputter__'):
+                oput = self.functions[ret['fun']].__outputter__
+                if isinstance(oput, string_types):
+                    ret['out'] = oput
+        except KeyError:
+            pass
 
-    @classmethod
-    def _thread_multi_return(cls, minion_instance, opts, data):
+        self._return_pub(ret)
+
+    def _thread_multi_return(self, data):
         '''
         This method should be used as a threading target, start the actual
         minion side execution.
         '''
-        # this seems awkward at first, but it's a workaround for Windows
-        # multiprocessing communication.
-        if not minion_instance:
-            minion_instance = cls(opts)
         ret = {
             'return': {},
             'success': {},
@@ -813,7 +766,7 @@ class Minion(object):
         for ind in range(0, len(data['fun'])):
             ret['success'][data['fun'][ind]] = False
             try:
-                func = minion_instance.functions[data['fun'][ind]]
+                func = self.functions[data['fun'][ind]]
                 args, kwargs = parse_args_and_kwargs(func, data['arg'][ind], data)
                 ret['return'][data['fun'][ind]] = func(*args, **kwargs)
                 ret['success'][data['fun'][ind]] = True
@@ -826,12 +779,11 @@ class Minion(object):
                 )
                 ret['return'][data['fun'][ind]] = trb
             ret['jid'] = data['jid']
-        minion_instance._return_pub(ret)
         if data['ret']:
             for returner in set(data['ret'].split(',')):
-                ret['id'] = opts['id']
+                ret['id'] = self.opts['id']
                 try:
-                    minion_instance.returners['{0}.returner'.format(
+                    self.returners['{0}.returner'.format(
                         returner
                     )](ret)
                 except Exception as exc:
@@ -841,6 +793,16 @@ class Minion(object):
                         exc
                         )
                     )
+        try:
+            if hasattr(self.functions[ret['fun']], '__outputter__'):
+                oput = self.functions[ret['fun']].__outputter__
+                if isinstance(oput, string_types):
+                    ret['out'] = oput
+        except KeyError:
+            pass
+
+        self._return_pub(ret)
+
 
     def _return_pub(self, ret, ret_cmd='_return'):
         '''
@@ -848,14 +810,6 @@ class Minion(object):
         '''
         jid = ret.get('jid', ret.get('__jid__'))
         fun = ret.get('fun', ret.get('__fun__'))
-        if self.opts['multiprocessing']:
-            fn_ = os.path.join(self.proc_dir, jid)
-            if os.path.isfile(fn_):
-                try:
-                    os.remove(fn_)
-                except (OSError, IOError):
-                    # The file is gone already
-                    pass
         log.info('Returning information for job: {0}'.format(jid))
         sreq = salt.payload.SREQ(self.opts['master_uri'])
         if ret_cmd == '_syndic_return':
@@ -874,13 +828,6 @@ class Minion(object):
                     'id': self.opts['id']}
             for key, value in ret.items():
                 load[key] = value
-        try:
-            if hasattr(self.functions[ret['fun']], '__outputter__'):
-                oput = self.functions[ret['fun']].__outputter__
-                if isinstance(oput, string_types):
-                    load['out'] = oput
-        except KeyError:
-            pass
         try:
             ret_val = sreq.send('aes', self.crypticle.dumps(load))
         except SaltReqTimeoutError:
@@ -969,8 +916,9 @@ class Minion(object):
         Refresh the functions and returners.
         '''
         self.functions, self.returners = self.__load_modules()
-        self.schedule.functions = self.functions
-        self.schedule.returners = self.returners
+        if hasattr(self, 'schedule'):
+            self.schedule.functions = self.functions
+            self.schedule.returners = self.returners
 
     def pillar_refresh(self):
         '''
@@ -991,11 +939,30 @@ class Minion(object):
         '''
         exit(0)
 
+    def handle_enter_mainloop(self):
+        pass
+
+    def handle_exit_mainloop(self):
+        pass
+
+    def handle_event(self, package):
+        if package.startswith('module_refresh'):
+            self.module_refresh()
+        elif package.startswith('pillar_refresh'):
+            self.pillar_refresh()
+
+    def handle_cycle_mainloop(self):
+        pass
+
+
     # Main Minion Tune In
     def tune_in(self):
         '''
         Lock onto the publisher. This is the main event loop for the minion
         '''
+
+        self.matcher = Matcher(self.opts, self.functions)
+
         try:
             log.info(
                 '{0} is starting as user \'{1}\''.format(
@@ -1142,54 +1109,53 @@ class Minion(object):
         # Make sure to gracefully handle CTRL_LOGOFF_EVENT
         salt.utils.enable_ctrl_logoff_handler()
 
+        self.handle_enter_mainloop()
+
         # On first startup execute a state run if configured to do so
         self._state_run()
         time.sleep(.5)
 
         loop_interval = int(self.opts['loop_interval'])
-        while True:
-            try:
-                self.schedule.eval()
-                # Check if scheduler requires lower loop interval than
-                # the loop_interval setting
-                if self.schedule.loop_interval < loop_interval:
-                    loop_interval = self.schedule.loop_interval
-                    log.debug(
-                        'Overriding loop_interval because of scheduled jobs.'
-                    )
-            except Exception as exc:
-                log.error(
-                    'Exception {0} occurred in scheduled job'.format(exc)
-                )
-            try:
-                socks = dict(self.poller.poll(
-                    loop_interval * 1000)
-                )
-                if self.socket in socks and socks[self.socket] == zmq.POLLIN:
-                    payload = self.serial.loads(self.socket.recv())
-                    self._handle_payload(payload)
-                # Check the event system
-                if self.epoller.poll(1):
+        try:
+            while True:
+                if hasattr(self, 'schedule'):
                     try:
-                        while True:
-                            package = self.epull_sock.recv(zmq.NOBLOCK)
-                            if package.startswith('module_refresh'):
-                                self.module_refresh()
-                            elif package.startswith('pillar_refresh'):
-                                self.pillar_refresh()
+                        self.schedule.eval()
+                        # Check if scheduler requires lower loop interval than
+                        # the loop_interval setting
+                        if self.schedule.loop_interval < loop_interval:
+                            loop_interval = self.schedule.loop_interval
+                            log.debug(
+                                'Overriding loop_interval because of scheduled jobs.'
+                            )
+                    except Exception as exc:
+                        log.exception(
+                            'Exception occurred in scheduled job'
+                        )
+                try:
+                    if self.poller.poll(loop_interval * 1000):
+                        payload = self.serial.loads(self.socket.recv())
+                        self._handle_payload(payload)
+                    # Check the event system
+                    while self.epoller.poll(1):
+                        package = self.epull_sock.recv()
+                        if self.handle_event(package) is not False:
+                            # If handle event returns false do not publish the event
                             self.epub_sock.send(package)
-                    except Exception:
-                        pass
-            except zmq.ZMQError:
-                # This is thrown by the interrupt caused by python handling the
-                # SIGCHLD. This is a safe error and we just start the poll
-                # again
-                continue
-            except Exception:
-                log.critical(
-                    'An exception occurred while polling the minion',
-                    exc_info=True
-                )
+                    self.handle_cycle_mainloop()
+                except zmq.ZMQError:
+                    log.exception('ZMQError')
+                    # This is thrown by the interrupt caused by python handling the
+                    # SIGCHLD. This is a safe error and we just start the poll
+                    # again
+                    continue
+                except Exception:
+                    log.critical(
+                        'An exception occurred while polling the minion',
+                        exc_info=True
+                    )
+        finally:
+            self.handle_exit_mainloop()
 
     def tune_in_no_block(self):
         '''
@@ -1243,10 +1209,7 @@ class Minion(object):
         loop_interval = int(self.opts['loop_interval'])
         while True:
             try:
-                socks = dict(self.poller.poll(
-                    loop_interval * 1000)
-                )
-                if self.socket in socks and socks[self.socket] == zmq.POLLIN:
+                if self.poller.poll(loop_interval * 1000):
                     payload = self.serial.loads(self.socket.recv())
                     self._handle_payload(payload)
                 # Check the event system
@@ -1265,28 +1228,15 @@ class Minion(object):
         Tear down the minion
         '''
         if hasattr(self, 'poller'):
-            if isinstance(self.poller.sockets, dict):
-                for socket in self.poller.sockets.keys():
-                    if socket.closed is False:
-                        socket.close()
-                    self.poller.unregister(socket)
-            else:
-                for socket in self.poller.sockets:
-                    if socket[0].closed is False:
-                        socket[0].close()
-                    self.poller.unregister(socket[0])
-
+            for socket in self.poller.sockets.keys():
+                if socket.closed is False:
+                    socket.close()
+                self.poller.unregister(socket)
         if hasattr(self, 'epoller'):
-            if isinstance(self.epoller.sockets, dict):
-                for socket in self.epoller.sockets.keys():
-                    if socket.closed is False:
-                        socket.close()
-                    self.epoller.unregister(socket)
-            else:
-                for socket in self.epoller.sockets:
-                    if socket[0].closed is False:
-                        socket[0].close()
-                    self.epoller.unregister(socket[0])
+            for socket in self.epoller.sockets.keys():
+                if socket.closed is False:
+                    socket.close()
+                self.epoller.unregister(socket)
         if hasattr(self, 'epub_sock') and self.epub_sock.closed is False:
             self.epub_sock.close()
         if hasattr(self, 'epull_sock') and self.epull_sock.closed is False:
@@ -1299,8 +1249,377 @@ class Minion(object):
     def __del__(self):
         self.destroy()
 
+class MinionWorker(object):
+    def __init__(self, context, proc):
+        self.context = zmq.Context()
+        self.proc = proc
+        self.connected = False
 
-class Syndic(Minion):
+    def connect(self, sock_uri):
+        self.pub_sock = self.context.socket(zmq.PAIR)
+        self.pub_sock.connect(sock_uri)
+        log.debug('WORKER REQ: {0}'.format(sock_uri))
+        self.connected = True
+
+    def send(self, data):
+        while True:
+            try:
+                return self.pub_sock.send(data)
+            except zmq.ZMQError:
+                log.exception('Worker send error')
+
+    def shutdown(self):
+        if self.proc.poll() is None:
+            self.proc.terminate()
+        if not self.pub_sock.closed:
+            self.pub_sock.close()
+
+    def __del__(self):
+        self.shutdown()
+        self.proc.wait()
+
+
+
+class MinionPool(MinionBase):
+    def __init__(self, *args, **kwargs):
+        super(MinionPool, self).__init__(*args, **kwargs)
+        self.worker = False
+        self.__pending_workers = {}
+        self.__ready_workers = {}
+        self.__busy_workers = {}
+        self.__dead_workers = {}
+        self.__requeue = []
+        self.initial_pool_size = 3
+        #self.max_pool_size = 20
+        self.idle_timeout = 10
+        self.proc_db = os.path.join(get_proc_dir(self.opts['cachedir']), 'jobs.sqlite3')
+        self.schedule = salt.utils.schedule.MinionPoolSchedule(self)
+
+    def handle_enter_mainloop(self):
+        if os.path.exists(self.proc_db):
+            os.remove(self.proc_db)
+        con = sqlite3.connect(self.proc_db)
+        con.execute("create table jobs(jid text primary key, data blob)")
+
+        self.__run = True
+        self.spawner = threading.Thread(target=self.worker_thread)
+        self.spawner.daemon = True
+        self.spawner.start()    
+
+    def worker_thread(self):
+        # Start worker processes
+        while True:
+            if self.__run and len(self.__ready_workers) + len(self.__pending_workers) < self.initial_pool_size:
+                self._start_worker()
+            time.sleep(0.3)
+
+    def handle_exit_mainloop(self):
+        self.__run = False
+        if os.path.exists(self.proc_db):
+            os.remove(self.proc_db)
+        while self.__dead_workers:
+            pid, worker = self.__dead_workers.popitem()
+            worker.shutdown()
+        while self.__ready_workers:
+            pid, worker = self.__ready_workers.popitem()
+            worker.shutdown()
+        while self.__pending_workers:
+            pid, worker = self.__pending_workers.popitem()
+            worker.shutdown()
+        while self.__busy_workers:
+            worker.shutdown()
+
+    def pool_size(self):
+        return len(self.__pending_workers) + len(self.__ready_workers) + len(self.__busy_workers)
+
+    def handle_cycle_mainloop(self):
+        while self.__dead_workers:
+            pid, worker = self.__dead_workers.popitem()
+            worker.proc.wait() 
+
+        still_pending = {}
+        while self.__pending_workers:
+            pid, worker = self.__pending_workers.popitem()
+            if worker.proc.poll() is not None:
+                worker.shutdown()
+                self.__dead_workers[pid] = worker
+            else:
+                still_pending[pid] = worker
+        self.__pending_workers = still_pending
+
+        still_busy = {}
+        while self.__busy_workers:
+            pid, worker = self.__busy_workers.popitem()
+            if worker.proc.poll() is not None:
+                worker.shutdown()
+                self.__dead_workers[pid] = worker
+            else:
+                still_busy[pid] = worker
+        self.__busy_workers = still_busy
+
+        still_ready = {}
+        while self.__ready_workers:
+            pid, worker = self.__ready_workers.popitem()
+            if worker.proc.poll() is not None:
+                worker.shutdown()
+                self.__dead_workers[pid] = worker
+            else:
+                still_ready[pid] = worker
+        self.__ready_workers = still_ready
+
+    def handle_event(self, package):
+        super(MinionPool, self).handle_event(package)
+        if package.startswith('pool-start'):
+            data = self.serial.loads(package[20:])
+            if data['pid'] in self.__pending_workers:
+                worker = self.__pending_workers.pop(data['pid'])
+                worker.connect(data['sock_uri'])
+                self.__ready_workers[data['pid']] = worker
+            return False
+        elif package.startswith('pool-done'):
+            data = self.serial.loads(package[20:])
+            if data['pid'] in self.__busy_workers:
+                worker = self.__busy_workers.pop(data['pid'])
+                self.__ready_workers[data['pid']] = worker
+            elif data['pid'] in self.__pending_workers:
+                worker = self.__pending_workers.pop(data['pid'])
+                self.__ready_workers[data['pid']] = worker
+            return False
+        elif package.startswith('pool-idle'):
+            if len(self.__ready_workers) > self.initial_pool_size: # and not self.__requeue:
+                data = self.serial.loads(package[20:])
+                if data['pid'] in self.__ready_workers:
+                    worker = self.__ready_workers.pop(data['pid'])
+                    worker.shutdown()
+                    self.__dead_workers[data['pid']] = worker
+            return False
+
+    def handle_worker_event(self, package):
+        super(MinionPool, self).handle_event(package)
+
+    def _handle_worker_payload(self, data):
+        if data['fun'] == 'schedule_run':
+            self.schedule.handle_func(*data['args'])
+        else:
+            super(MinionPool, self)._handle_decoded_payload(data)
+
+    def _handle_decoded_payload(self, data):
+        while not self.__ready_workers:
+            if self.epoller.poll(50):
+                package = self.epull_sock.recv()
+                if self.handle_event(package) is not False:
+                    # If handle event returns false do not publish the event
+                    self.epub_sock.send(package)
+        if True:
+            pid, worker = self.__ready_workers.popitem()
+            worker.send(
+                self.crypticle.dumps(data)
+            )
+            self.__busy_workers[pid] = worker
+            
+    def _start_worker(self):
+        if sys.argv[0].endswith('.exe'):
+            cmd = sys.argv + ['--worker']
+        else:
+            cmd = [sys.executable] + sys.argv + ['--worker']
+        log.info(cmd)
+        env = copy.copy(os.environ)
+        env['PYTHONPATH'] = ':'.join(sys.path[1:])
+        proc = subprocess.Popen(cmd, env=env)
+        self.__pending_workers[proc.pid] = MinionWorker(self.context, proc)
+
+    def tune_in_worker(self):
+        self.worker = True
+
+        id_hash = hashlib.md5(self.opts['id']).hexdigest()
+        self.context = zmq.Context()
+        self.poller = zmq.Poller()
+        self.epoller = zmq.Poller()
+
+        sock_path = os.path.join(
+            self.opts['sock_dir'],
+            'minion_worker_{0}_{1}.ipc'.format(id_hash, os.getpid())
+        )
+        epub_sock_path = os.path.join(
+            self.opts['sock_dir'],
+            'minion_event_{0}_pub.ipc'.format(id_hash)
+        )
+        if self.opts.get('ipc_mode', '') == 'tcp':
+            sock_uri = 'tcp://127.0.0.1:*'
+            epub_uri = 'tcp://127.0.0.1:{0}'.format(
+                self.opts['tcp_pub_port']
+            )
+        else:
+            sock_uri = 'ipc://{0}'.format(sock_path)
+            salt.utils.check_ipc_path_max_len(sock_uri)
+            epub_uri = 'ipc://{0}'.format(epub_sock_path)
+            salt.utils.check_ipc_path_max_len(epub_uri)
+        log.debug(
+            '{0} PUB socket URI: {1}'.format(
+                self.__class__.__name__, sock_uri
+            )
+        )
+        log.debug(
+            '{0} ESUB socket URI: {1}'.format(
+                self.__class__.__name__, epub_uri
+            )
+        )
+
+
+        # Create the pull socket
+        self.socket = self.context.socket(zmq.PAIR)
+        # Bind the event sockets
+        self.socket.bind(sock_uri)
+
+        if self.opts.get('ipc_mode', '') == 'tcp':
+            sock_uri = self.socket.getsockopt(zmq.LAST_ENDPOINT)
+            # Strip the trailing null
+            sock_uri = sock_uri.rstrip('\x00')
+
+        # Create the event sub socket
+        self.epub_sock = self.context.socket(zmq.SUB)
+        self.epub_sock.setsockopt(zmq.SUBSCRIBE, '')
+        self.epub_sock.connect(epub_uri)
+
+
+        # Restrict access to the sockets
+        if self.opts.get('ipc_mode', '') != 'tcp':
+            os.chmod(
+                sock_path,
+                448
+            )
+
+        self.poller.register(self.socket, zmq.POLLIN)
+        self.epoller.register(self.epub_sock, zmq.POLLIN)
+
+        data = {
+            'sock_uri': sock_uri,
+            'pid': os.getpid() 
+        }
+        # Send an event to the minion process when worker starts
+        self.minion_event = salt.utils.event.MinionEvent(**self.opts)
+        self.minion_event.fire_event(data, 'pool-start')
+
+        # Listen for events
+        loop_interval = int(self.opts['loop_interval'])
+        idle = time.time() + self.idle_timeout
+        while True:
+            try:
+                if self.poller.poll(loop_interval * 1000):
+                    payload = self.crypticle.loads(self.socket.recv())
+
+                    # Save dunderscore before
+                    saved_mods = {}
+                    for func in self.functions.itervalues():
+                        if func.__module__ not in saved_mods:
+                            mod = sys.modules.get(func.__module__)
+                            to_save = {}
+                            for attr in ('__opts__', '__context__'):
+                                if hasattr(sys.modules[func.__module__], attr):
+                                    to_save[attr] = copy.deepcopy(
+                                        getattr(sys.modules[func.__module__], attr)
+                                    )
+                            saved_mods[func.__module__] = to_save
+                    
+                    self._handle_worker_payload(payload)
+
+                    # Restore dunderscode
+                    for saved_mod_name, saved_mod_attrs in saved_mods.iteritems():
+                        for attr, value in saved_mod_attrs.iteritems():
+                            setattr(sys.modules[saved_mod_name], attr, value)
+
+                    self.minion_event.fire_event(data, 'pool-done')
+                elif time.time() > idle:
+                    self.minion_event.fire_event(data, 'pool-idle')
+                    idle = time.time() + self.idle_timeout                    
+
+                while self.epoller.poll(1):
+                    package = self.epub_sock.recv()
+                    self.handle_worker_event(package)
+                time.sleep(0.05)
+            except zmq.ZMQError:
+                # This is thrown by the interrupt caused by python handling the
+                # SIGCHLD. This is a safe error and we just start the poll
+                # again
+                log.exception('ZMQError')
+                continue
+            except Exception:
+                log.critical(
+                    'An exception occurred while polling the minion',
+                    exc_info=True
+                )
+                raise
+
+    def __return_pub(self, ret, ret_cmd='_return'):
+        super(MinionPool, self)._return_pub(ret, ret_cmd)
+
+    def _run(self, data):
+        sdata = {'pid': os.getpid()}
+        sdata.update(data)
+        con = sqlite3.connect(self.proc_db)
+        con.execute('insert into jobs(jid, data) values (?, ?)', (data['jid'], buffer(self.serial.dumps(sdata))))
+        con.commit()
+        # Create proc entry here
+        try:
+            if isinstance(data['fun'], tuple) or isinstance(data['fun'], list):
+                self._thread_multi_return(data)
+            else:
+                self._thread_return(data)
+        finally:
+            con.execute('delete from jobs where jid=?', (data['jid'],))
+            con.commit()
+
+class MinionFork(MinionBase):
+    '''
+    This class instantiates a minion, runs connections for a minion,
+    and loads all of the functions into the minion
+    '''
+    def __init__(self, *args, **kwargs):
+        if not hasattr(os, 'fork'):
+            raise Exception('Fork is not supported on this os')
+        super(MinionFork, self).__init__(*args, **kwargs)
+        self.schedule = salt.utils.schedule.Schedule(
+            self.opts,
+            self.functions,
+            self.returners)
+        self.proc_dir = get_proc_dir(self.opts['cachedir'])
+
+    def _run(self, data):
+        pid = os.fork()
+        if pid == 0:
+            salt.utils.daemonize()
+
+            fn_ = os.path.join(self.proc_dir, data['jid'])
+            sdata = {'pid': os.getpid()}
+            sdata.update(data)
+
+            with salt.utils.fopen(fn_, 'w+') as fp_:
+                fp_.write(self.serial.dumps(sdata))
+
+            try:
+                if isinstance(data['fun'], tuple) or isinstance(data['fun'], list):
+                    self._thread_multi_return(data)
+                else:
+                    self._thread_return(data)
+            finally:
+                fn_ = os.path.join(self.proc_dir, data['jid'])
+                if os.path.isfile(fn_):
+                    try:
+                        os.remove(fn_)
+                    except (OSError, IOError):
+                        # The file is gone already
+                        pass
+            exit(0)
+        else:
+            os.waitpid(pid, 0)
+
+def Minion(opts, timeout=60, safe=True):
+    if opts.get('processpool') or not hasattr(os, 'fork'):
+        return MinionPool(opts, timeout, safe)
+    else:
+        return MinionFork(opts, timeout, safe)        
+
+class Syndic(MinionFork):
     '''
     Make a Syndic minion, this minion will use the minion keys on the
     master to authenticate with a higher level master.
@@ -1309,7 +1628,9 @@ class Syndic(Minion):
         self._syndic_interface = opts.get('interface')
         self._syndic = True
         opts['loop_interval'] = 1
-        Minion.__init__(self, opts)
+        super(Syndic, self).__init__(opts)
+        opts.update(self.opts)
+        self.opts = opts
 
     def _handle_aes(self, load, sig=None):
         '''
@@ -1655,6 +1976,7 @@ class Matcher(object):
             return False
         ref = {'G': 'grain',
                'P': 'grain_pcre',
+               'X': 'exsel',
                'I': 'pillar',
                'L': 'list',
                'S': 'ipcidr',

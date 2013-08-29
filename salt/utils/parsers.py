@@ -953,7 +953,9 @@ class MasterOptionParser(OptionParser, ConfigDirMixIn, MergeConfigMixIn,
         return config.master_config(self.get_config_file_path())
 
 
-class MinionOptionParser(MasterOptionParser):
+class MinionOptionParser(OptionParser, ConfigDirMixIn, MergeConfigMixIn,
+                         LogLevelMixIn, RunUserMixin, DaemonMixIn,
+                         PidfileMixin):
 
     __metaclass__ = OptionParserMeta
 
@@ -966,9 +968,19 @@ class MinionOptionParser(MasterOptionParser):
     # LogLevelMixIn attributes
     _default_logging_logfile_ = os.path.join(syspaths.LOGS_DIR, 'minion')
 
+
+    def _mixin_setup(self):
+        self.add_option(
+            '--worker', dest='worker',
+            action="store_true",
+            default=False,
+            help=optparse.SUPPRESS_HELP
+        )
+
     def setup_config(self):
         return config.minion_config(self.get_config_file_path(),
                                     minion_id=True)
+
 
 
 class SyndicOptionParser(OptionParser, ConfigDirMixIn, MergeConfigMixIn,

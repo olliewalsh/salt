@@ -377,11 +377,12 @@
 # salt master.
 #master_finger: ''
 
-######         Thread settings        #####
+######         Process settings        #####
 ###########################################
-# Disable multiprocessing support, by default when a minion receives a
-# publication a new process is spawned and the command is executed therein.
-#multiprocessing: True
+# Use a pool of worker processses instead of spawning a daemon process to execute
+# each command on the minion. If fork() is not supported by the OS (e.g Windows)
+# a pool is always used.
+#processpool: True
 
 #####         Logging settings       #####
 ##########################################

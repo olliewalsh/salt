@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 '''
 Make me some salt!
 '''
@@ -6,27 +5,12 @@ Make me some salt!
 # Import python libs
 import os
 import sys
-import warnings
-
-# All salt related deprecation warnings should be shown once each!
-warnings.filterwarnings(
-    'once',                 # Show once
-    '',                     # No deprecation message match
-    DeprecationWarning,     # This filter is for DeprecationWarnings
-    r'^(salt|salt\.(.*))$'  # Match module(s) 'salt' and 'salt.<whatever>'
-)
-
-# While we are supporting Python2.6, hide nested with-statements warnings
-warnings.filterwarnings(
-    'ignore',
-    'With-statements now directly support multiple context managers',
-    DeprecationWarning
-)
+import logging
 
 # Import salt libs
 # We import log ASAP because we NEED to make sure that any logger instance salt
-# instantiates is using salt.log.setup.SaltLoggingClass
-import salt.log.setup
+# instantiates is using salt.log.SaltLoggingClass
+import salt.log
 
 
 # the try block below bypasses an issue at build time so that modules don't
@@ -38,15 +22,15 @@ try:
     from salt.utils import parsers, ip_bracket
     from salt.utils.verify import check_user, verify_env, verify_socket
     from salt.utils.verify import verify_files
-except ImportError as exc:
-    if exc.args[0] != 'No module named _msgpack':
+except ImportError as e:
+    if e.args[0] != 'No module named _msgpack':
         raise
 from salt.exceptions import SaltSystemExit, MasterExit
 
 
-# Let's instantiate logger using salt.log.setup.logging.getLogger() so pylint
-# leaves us alone and stops complaining about an un-used import
-logger = salt.log.setup.logging.getLogger(__name__)
+# Let's instantiate logger using salt.log.logging.getLogger() so pylint leaves
+# us alone and stops complaining about an un-used import
+logger = salt.log.logging.getLogger(__name__)
 
 
 class Master(parsers.MasterOptionParser):
@@ -83,9 +67,9 @@ class Master(parsers.MasterOptionParser):
                     pki_dir=self.config['pki_dir'],
                 )
                 logfile = self.config['log_file']
-                if logfile is not None and not logfile.startswith(('tcp://',
-                                                                   'udp://',
-                                                                   'file://')):
+                if logfile is not None and not logfile.startswith('tcp://') \
+                        and not logfile.startswith('udp://') \
+                        and not logfile.startswith('file://'):
                     # Logfile is not using Syslog, verify
                     verify_files([logfile], self.config['user'])
         except OSError as err:
@@ -155,16 +139,11 @@ class Minion(parsers.MinionOptionParser):
                         # Value is of the form "minion.d/*.conf"
                         confd = os.path.dirname(confd)
                     if not os.path.isabs(confd):
-                        # If configured 'default_include' is not an absolute
-                        # path, consider it relative to folder of 'conf_file'
-                        # (/etc/salt by default)
-                        confd = os.path.join(
-                            os.path.dirname(self.config['conf_file']), confd
-                        )
+                        # If configured 'default_include' is not an absolute path,
+                        # consider it relative to folder of 'conf_file' (/etc/salt by default)
+                        confd = os.path.join(os.path.dirname(self.config['conf_file']), confd)
                 else:
-                    confd = os.path.join(
-                        os.path.dirname(self.config['conf_file']), 'minion.d'
-                    )
+                    confd = os.path.join(os.path.dirname(self.config['conf_file']), 'minion.d')
                 verify_env(
                     [
                         self.config['pki_dir'],
@@ -178,9 +157,9 @@ class Minion(parsers.MinionOptionParser):
                     pki_dir=self.config['pki_dir'],
                 )
                 logfile = self.config['log_file']
-                if logfile is not None and not logfile.startswith(('tcp://',
-                                                                   'udp://',
-                                                                   'file://')):
+                if logfile is not None and not logfile.startswith('tcp://') \
+                        and not logfile.startswith('udp://') \
+                        and not logfile.startswith('file://'):
                     # Logfile is not using Syslog, verify
                     verify_files([logfile], self.config['user'])
         except OSError as err:
@@ -199,8 +178,9 @@ class Minion(parsers.MinionOptionParser):
         # waiting for it, if we daemonize later then the minion could halt
         # the boot process waiting for a key to be accepted on the master.
         # This is the latest safe place to daemonize
-        self.daemonize_if_required()
-        self.set_pidfile()
+        if not self.options.worker:
+            self.daemonize_if_required()
+            self.set_pidfile()
         if isinstance(self.config.get('master'), list):
             self.minion = salt.minion.MultiMinion(self.config)
         else:
@@ -219,13 +199,16 @@ class Minion(parsers.MinionOptionParser):
         self.prepare()
         try:
             if check_user(self.config['user']):
-                self.minion.tune_in()
-        except (KeyboardInterrupt, SaltSystemExit) as exc:
+                if self.options.worker:
+                    self.minion.tune_in_worker()
+                else:
+                    self.minion.tune_in()
+        except (KeyboardInterrupt, SaltSystemExit) as e:
             logger.warn('Stopping the Salt Minion')
-            if isinstance(exc, KeyboardInterrupt):
+            if isinstance(e, KeyboardInterrupt):
                 logger.warn('Exiting on Ctrl-c')
             else:
-                logger.error(str(exc))
+                logger.error(str(e))
         finally:
             self.shutdown()
 
@@ -263,9 +246,9 @@ class Syndic(parsers.SyndicOptionParser):
                     pki_dir=self.config['pki_dir'],
                 )
                 logfile = self.config['log_file']
-                if logfile is not None and not logfile.startswith(('tcp://',
-                                                                   'udp://',
-                                                                   'file://')):
+                if logfile is not None and not logfile.startswith('tcp://') \
+                        and not logfile.startswith('udp://') \
+                        and not logfile.startswith('file://'):
                     # Logfile is not using Syslog, verify
                     verify_files([logfile], self.config['user'])
         except OSError as err:

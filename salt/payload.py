@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 '''
 Many aspects of the salt payload need to be managed, from the return of
 encrypted keys to general payload dynamics and packaging, these happen
@@ -6,23 +5,19 @@ in here
 '''
 
 # Import python libs
-#import sys  # Use of sys is commented out below
-import logging
+import sys
 
 # Import salt libs
 import salt.log
 import salt.crypt
 from salt.exceptions import SaltReqTimeoutError
 from salt._compat import pickle
+import uuid
 
 # Import third party libs
-try:
-    import zmq
-except ImportError:
-    # No need for zeromq in local mode
-    pass
+import zmq
 
-log = logging.getLogger(__name__)
+log = salt.log.logging.getLogger(__name__)
 
 try:
     # Attempt to import msgpack
@@ -41,9 +36,7 @@ except ImportError:
         LOG_FORMAT = '[%(levelname)-8s] %(message)s'
         salt.log.setup_console_logger(log_format=LOG_FORMAT)
         log.fatal('Unable to import msgpack or msgpack_pure python modules')
-        # Don't exit if msgpack is not available, this is to make local mode
-        # work without msgpack
-        #sys.exit(1)
+        sys.exit(1)
 
 
 def package(payload):
@@ -153,7 +146,7 @@ class SREQ(object):
     '''
     Create a generic interface to wrap salt zeromq req calls.
     '''
-    def __init__(self, master, id_='', serial='msgpack', linger=0):
+    def __init__(self, master, id_='', serial='msgpack', linger=5000):
         self.master = master
         self.serial = Serial(serial)
         self.context = zmq.Context()
@@ -166,11 +159,12 @@ class SREQ(object):
         if master.startswith('tcp://[') and hasattr(zmq, 'IPV4ONLY'):
             # IPv6 sockets work for both IPv6 and IPv4 addresses
             self.socket.setsockopt(zmq.IPV4ONLY, 0)
-        self.socket.linger = linger
-        if id_:
-            self.socket.setsockopt(zmq.IDENTITY, id_)
+        if not id_:
+            id_ = 'salt-{0}'.format(uuid.uuid1())
+        self.socket.setsockopt(zmq.IDENTITY, id_)
         self.socket.connect(master)
         self.poller = zmq.Poller()
+        self.linger = linger
 
     def send(self, enc, load, tries=1, timeout=60):
         '''
@@ -204,20 +198,13 @@ class SREQ(object):
         return self.send(enc, load, tries, timeout)
 
     def destroy(self):
-        if isinstance(self.poller.sockets, dict):
-            for socket in self.poller.sockets.keys():
-                if socket.closed is False:
-                    socket.setsockopt(zmq.LINGER, 1)
-                    socket.close()
-                self.poller.unregister(socket)
-        else:
-            for socket in self.poller.sockets:
-                if socket[0].closed is False:
-                    socket[0].setsockopt(zmq.LINGER, 1)
-                    socket[0].close()
-                self.poller.unregister(socket[0])
+        for socket in self.poller.sockets.keys():
+            if socket.closed is False:
+                socket.setsockopt(zmq.LINGER, self.linger)
+                socket.close()
+            self.poller.unregister(socket)
         if self.socket.closed is False:
-            self.socket.setsockopt(zmq.LINGER, 1)
+            self.socket.setsockopt(zmq.LINGER, self.linger)
             self.socket.close()
         if self.context.closed is False:
             self.context.term()

@@ -15,10 +15,8 @@ of the Salt system each have a respective configuration file. The
 The Salt Minion configuration is very simple, typically the only value that
 needs to be set is the master value so the minion can find its master.
 
-
-
 Minion Primary Configuration
-============================
+----------------------------
 
 .. conf_minion:: master
 
@@ -93,7 +91,7 @@ This directory is prepended to the following options: :conf_minion:`pki_dir`,
 ``pki_dir``
 -----------
 
-Default: ``/etc/salt/pki``
+Default: :file:`/etc/salt/pki`
 
 The directory used to store the minion's public and private keys.
 
@@ -106,12 +104,8 @@ The directory used to store the minion's public and private keys.
 ``id``
 ------
 
-Default: the system's hostname
-
-.. seealso:: :ref:`Salt Walkthrough <minion-id-generation>`
-
-    The :strong:`Setting up a Salt Minion` section contains detailed
-    information on how the hostname is determined.
+Default: the system's hostname (as returned by the Python function 
+``socket.getfqdn()``)
 
 Explicitly declare the id for this minion to use. Since Salt uses detached ids
 it is possible to run multiple minions on the same machine but with different
@@ -141,7 +135,7 @@ FQDN (for instance, Solaris).
 ``cachedir``
 ------------
 
-Default: ``/var/cache/salt``
+Default: :file:`/var/cache/salt`
 
 The location for minion cache data.
 
@@ -304,10 +298,8 @@ Pull port used when :conf_minion:`ipc_mode` is set to ``tcp``.
 
     tcp_pull_port: 4511
 
-
-
 Minion Module Management
-========================
+------------------------
 
 .. conf_minion:: disable_modules
 
@@ -432,10 +424,8 @@ below.
       pkg: yumpkg5
       service: systemd
 
-
-      
 State Management Settings
-=========================
+-------------------------
 
 .. conf_minion:: renderer
 
@@ -525,10 +515,8 @@ environments is to isolate via the top file.
 
     environment: None
 
-
-
 File Directory Settings
-=======================
+-----------------------
 
 .. conf_minion:: file_client
 
@@ -612,10 +600,8 @@ the pillar environments.
       prod:
         - /srv/pillar/prod
 
-
-
 Security Settings
-=================
+-----------------
 
 .. conf_minion:: open_mode
 
@@ -632,41 +618,35 @@ minion to clean the keys.
 
     open_mode: False
 
+Process Settings
+---------------
 
+.. conf_minion:: processpool
 
-Thread Settings
-===============
+Default: ``False``
 
-.. conf_minion:: multiprocessing
-
-Default: ``True``
-
-Disable multiprocessing support by default when a minion receives a
-publication a new process is spawned and the command is executed therein.
+Use a pool of worker processses instead of spawning a daemon process to execute
+each command on the minion. If fork() is not supported by the OS (e.g Windows)
+a pool is always used.
 
 .. code-block:: yaml
 
-    multiprocessing: True
-
-
-
-
-.. _minion-logging-settings:
+    processpool: False
 
 Minion Logging Settings
-=======================
+-----------------------
 
 .. conf_minion:: log_file
 
 ``log_file``
 ------------
 
-Default: ``/var/log/salt/minion``
+Default: /var/log/salt/minion
 
-The minion log can be sent to a regular file, local path name, or network 
-location.  See also :conf-log:`log_file`.
-
-Examples:
+The minion log can be sent to a regular file, local path name, or network location.
+Remote logging works best when configured to use rsyslogd(8) (e.g.: ``file:///dev/log``),
+with rsyslogd(8) configured for network logging.  The format for remote addresses is:
+``<file|udp|tcp>://<host|socketpath>:<port-if-required>/<log-facility>``.  Examples:
 
 .. code-block:: yaml
 
@@ -680,8 +660,6 @@ Examples:
 
     log_file: udp://loghost:10514
 
-
-
 .. conf_minion:: log_level
 
 ``log_level``
@@ -689,14 +667,12 @@ Examples:
 
 Default: ``warning``
 
-The level of messages to send to the console. See also :conf-log:`log_level`.
+The level of messages to send to the console.
+One of 'garbage', 'trace', 'debug', info', 'warning', 'error', 'critical'.
 
 .. code-block:: yaml
 
     log_level: warning
-
-
-
 
 .. conf_minion:: log_level_logfile
 
@@ -705,14 +681,12 @@ The level of messages to send to the console. See also :conf-log:`log_level`.
 
 Default: ``warning``
 
-The level of messages to send to the log file. See also 
-:conf-log:`log_level_logfile`.
+The level of messages to send to the log file.
+One of 'garbage', 'trace', 'debug', info', 'warning', 'error', 'critical'.
 
 .. code-block:: yaml
 
     log_level_logfile: warning
-
-
 
 .. conf_minion:: log_datefmt
 
@@ -721,15 +695,12 @@ The level of messages to send to the log file. See also
 
 Default: ``%H:%M:%S``
 
-The date and time format used in console log messages. See also 
-:conf-log:`log_datefmt`.
+The date and time format used in console log messages. Allowed date/time formatting
+can be seen on http://docs.python.org/library/time.html#time.strftime
 
 .. code-block:: yaml
 
     log_datefmt: '%H:%M:%S'
-
-
-
 
 .. conf_minion:: log_datefmt_logfile
 
@@ -738,14 +709,12 @@ The date and time format used in console log messages. See also
 
 Default: ``%Y-%m-%d %H:%M:%S``
 
-The date and time format used in log file messages. See also 
-:conf-log:`log_datefmt_logfile`.
+The date and time format used in log file messages. Allowed date/time formatting
+can be seen on http://docs.python.org/library/time.html#time.strftime
 
 .. code-block:: yaml
 
     log_datefmt_logfile: '%Y-%m-%d %H:%M:%S'
-
-
 
 .. conf_minion:: log_fmt_console
 
@@ -754,14 +723,12 @@ The date and time format used in log file messages. See also
 
 Default: ``[%(levelname)-8s] %(message)s``
 
-The format of the console logging messages. See also 
-:conf-log:`log_fmt_console`.
+The format of the console logging messages. Allowed formatting options can
+be seen on http://docs.python.org/library/logging.html#logrecord-attributes
 
 .. code-block:: yaml
 
     log_fmt_console: '[%(levelname)-8s] %(message)s'
-
-
 
 .. conf_minion:: log_fmt_logfile
 
@@ -770,14 +737,12 @@ The format of the console logging messages. See also
 
 Default: ``%(asctime)s,%(msecs)03.0f [%(name)-17s][%(levelname)-8s] %(message)s``
 
-The format of the log file logging messages. See also 
-:conf-log:`log_fmt_logfile`.
+The format of the log file logging messages. Allowed formatting options can
+be seen on http://docs.python.org/library/logging.html#logrecord-attributes
 
 .. code-block:: yaml
 
     log_fmt_logfile: '%(asctime)s,%(msecs)03.0f [%(name)-17s][%(levelname)-8s] %(message)s'
-
-
 
 .. conf_minion:: log_granular_levels
 
@@ -786,13 +751,15 @@ The format of the log file logging messages. See also
 
 Default: ``{}``
 
-This can be used to control logging levels more specifically. See also 
-:conf-log:`log_granular_levels`.
+This can be used to control logging levels more specifically.  This
+example sets the main salt library at the 'warning' level, but sets 
+'salt.modules' to log at the 'debug' level:
 
+.. code-block:: yaml
 
-
-Include Configuration
-=====================
+  log_granular_levels:
+    'salt': 'warning',
+    'salt.modules': 'debug'
 
 .. conf_minion:: include
 
@@ -834,9 +801,8 @@ option then the minion will log a warning message.
       - /etc/roles/webserver
 
 
-
 Frozen Build Update Settings
-============================
+----------------------------
 
 These options control how :py:func:`salt.modules.saltutil.update` works with esky
 frozen apps. For more information look at `<https://github.com/cloudmatrix/esky/>`_.
