@@ -48,7 +48,8 @@ def __get_version(version, version_info):
         kwargs = dict(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd=cwd
+            cwd=cwd,
+            shell=True
         )
 
         if not sys.platform.startswith('win'):
