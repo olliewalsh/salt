@@ -48,19 +48,19 @@ def __get_version(version, version_info):
         kwargs = dict(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd=cwd,
-            shell=True
+            cwd=cwd
         )
 
         if not sys.platform.startswith('win'):
             # Let's not import `salt.utils` for the above check
             kwargs['close_fds'] = True
+        else:
+            kwargs['shell'] = True
 
         process = subprocess.Popen(['git', 'describe', '--tags'], **kwargs)
         out, err = process.communicate()
         out = out.strip()
         err = err.strip()
-
         if not out or err:
             return version, version_info
 
