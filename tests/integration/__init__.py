@@ -379,10 +379,22 @@ class TestDaemon(object):
         '''
         Kill the minion and master processes
         '''
-        self.sub_minion_process.terminate()
-        self.sub_minion_process.join()
-        self.minion_process.terminate()
-        self.minion_process.join()
+        import integration
+        integration.SYNDIC = None
+        if self.sub_minion_opts.get('processpool', False):
+            while self.sub_minion_process.poll() is None:
+                self.sub_minion_process.terminate()
+            self.sub_minion_process.wait()
+        else:
+            self.sub_minion_process.terminate()
+            self.sub_minion_process.join()
+        if self.minion_opts.get('processpool', False):
+            while self.minion_process.poll() is None:
+                self.minion_process.terminate()
+            self.minion_process.wait()
+        else:
+            self.minion_process.terminate()
+            self.minion_process.join()
         self.master_process.terminate()
         self.master_process.join()
         self.syndic_process.terminate()
