@@ -294,8 +294,10 @@ def file_hash(load, fnd):
     short = load['env']
     if short == 'base':
         short = 'master'
-    relpath = fnd['rel']
-    path = fnd['path']
+    local_relpath = fnd['rel']
+    relpath = os.path.join(__opts__['gitfs_root'], local_relpath)
+    local_path = fnd['path']
+    path = os.path.join(__opts__['gitfs_root'], local_path)
     hashdest = os.path.join(__opts__['cachedir'],
                             'gitfs/hash',
                             short,
