@@ -38,6 +38,8 @@ def __virtual__():
     '''
     if not isinstance(__opts__['gitfs_remotes'], list):
         return False
+    if not isinstance(__opts__['gitfs_root'], str):
+        return False
     if not 'git' in __opts__['fileserver_backend']:
         return False
     if not HAS_GIT:
@@ -186,6 +188,10 @@ def find_file(path, short='base', **kwargs):
            'rel': ''}
     if os.path.isabs(path):
         return fnd
+
+    local_path = path
+    path = os.path.join(__opts__['gitfs_root'], local_path)
+
     if short == 'base':
         short = 'master'
     dest = os.path.join(__opts__['cachedir'], 'gitfs/refs', short, path)
@@ -232,7 +238,7 @@ def find_file(path, short='base', **kwargs):
             with open(blobshadest, 'r') as fp_:
                 sha = fp_.read()
                 if sha == blob.hexsha:
-                    fnd['rel'] = path
+                    fnd['rel'] = local_path
                     fnd['path'] = dest
                     return fnd
         with open(lk_fn, 'w+') as fp_:
@@ -250,7 +256,7 @@ def find_file(path, short='base', **kwargs):
             os.remove(lk_fn)
         except (OSError, IOError):
             pass
-        fnd['rel'] = path
+        fnd['rel'] = local_path
         fnd['path'] = dest
         return fnd
     return fnd
@@ -323,11 +329,14 @@ def file_list(load):
         ref = _get_ref(repo, load['env'])
         if not ref:
             continue
-        tree = ref.commit.tree
+        try:
+            tree = ref.commit.tree / __opts__['gitfs_root']
+        except KeyError:
+            continue
         for blob in tree.traverse():
             if not isinstance(blob, git.Blob):
                 continue
-            ret.append(blob.path)
+            ret.append(os.path.relpath(blob.path, __opts__['gitfs_root']))
     return ret
 
 
@@ -345,12 +354,15 @@ def file_list_emptydirs(load):
         ref = _get_ref(repo, load['env'])
         if not ref:
             continue
-        tree = ref.commit.tree
+        try:
+            tree = ref.commit.tree / __opts__['gitfs_root']
+        except KeyError:
+            continue
         for blob in tree.traverse():
             if not isinstance(blob, git.Tree):
                 continue
             if not blob.blobs:
-                ret.append(blob.path)
+                ret.append(os.path.relpath(blob.path, __opts__['gitfs_root']))
     return ret
 
 
@@ -368,9 +380,12 @@ def dir_list(load):
         ref = _get_ref(repo, load['env'])
         if not ref:
             continue
-        tree = ref.commit.tree
+        try:
+            tree = ref.commit.tree / __opts__['gitfs_root']
+        except KeyError:
+            continue
         for blob in tree.traverse():
             if not isinstance(blob, git.Tree):
                 continue
-            ret.append(blob.path)
+            ret.append(os.path.relpath(blob.path, __opts__['gitfs_root']))
     return ret
