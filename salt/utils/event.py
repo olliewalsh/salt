@@ -71,6 +71,7 @@ import salt.payload
 import salt.loader
 import salt.state
 import salt.utils
+from salt.utils.decorators import memoize
 from salt._compat import string_types
 log = logging.getLogger(__name__)
 
@@ -117,17 +118,35 @@ def tagify(suffix='', prefix='', base=SALT):
         parts.append(suffix)
     return (TAGPARTER.join([part for part in parts if part]))
 
+@memoize
+def _EventContext():
+    '''
+    Construct a zmq.Context for events on first use and cache it.
+
+    Drop any queued events when the context is destroyed (i.e the process exits).
+    '''
+    class NoLingerContext(zmq.Context):
+        def __del__(self):
+            self.destroy(linger=0)
+            super(NoLingerContext, self).__del__()
+
+    return NoLingerContext()
+
 
 class SaltEvent(object):
     '''
     The base class used to manage salt events
     '''
-    def __init__(self, node, sock_dir=None, **kwargs):
+    def __init__(self, node, sock_dir=None, linger=None, **kwargs):
         self.serial = salt.payload.Serial({'serial': 'msgpack'})
-        self.context = zmq.Context()
+        self.context = _EventContext()
         self.poller = zmq.Poller()
         self.cpub = False
         self.cpush = False
+        if linger is None:
+            self.linger = 10000
+        else:
+            self.linger = linger
         self.puburi, self.pulluri = self.__load_uri(sock_dir, node, **kwargs)
 
     def __load_uri(self, sock_dir, node, **kwargs):
@@ -196,6 +215,7 @@ class SaltEvent(object):
         Establish the publish connection
         '''
         self.sub = self.context.socket(zmq.SUB)
+        self.sub.setsockopt(zmq.LINGER, self.linger)
         self.sub.connect(self.puburi)
         self.poller.register(self.sub, zmq.POLLIN)
         self.cpub = True
@@ -205,6 +225,7 @@ class SaltEvent(object):
         Establish a connection with the event pull socket
         '''
         self.push = self.context.socket(zmq.PUSH)
+        self.push.setsockopt(zmq.LINGER, self.linger)
         self.push.connect(self.pulluri)
         self.cpush = True
 
@@ -276,28 +297,6 @@ class SaltEvent(object):
         self.push.send(event)
         return True
 
-    def destroy(self):
-        if self.cpub is True and self.sub.closed is False:
-            # Wait at most 2.5 secs to send any remaining messages in the
-            # socket or the context.term() bellow will hang indefinitely.
-            # See https://github.com/zeromq/pyzmq/issues/102
-            self.sub.setsockopt(zmq.LINGER, 1)
-            self.sub.close()
-        if self.cpush is True and self.push.closed is False:
-            self.push.setsockopt(zmq.LINGER, 1)
-            self.push.close()
-        # If sockets are not unregistered from a poller, nothing which touches
-        # that poller gets garbage collected. The Poller itself, its
-        # registered sockets and the Context
-        for socket in self.poller.sockets.keys():
-            if socket.closed is False:
-                # Should already be closed from above, but....
-                socket.setsockopt(zmq.LINGER, 1)
-                socket.close()
-            self.poller.unregister(socket)
-        if self.context.closed is False:
-            self.context.term()
-
     def fire_ret_load(self, load):
         '''
         Fire events based on information in the return load
@@ -330,9 +329,6 @@ class SaltEvent(object):
                 except Exception:
                     pass
 
-    def __del__(self):
-        self.destroy()
-
 
 class MasterEvent(SaltEvent):
     '''
@@ -363,23 +359,29 @@ class EventPublisher(Process):
     The interface that takes master events and republishes them out to anyone
     who wants to listen
     '''
-    def __init__(self, opts):
+    def __init__(self, opts, linger=None):
         super(EventPublisher, self).__init__()
         self.opts = opts
+        if linger is None:
+            self.linger = 10000
+        else:
+            self.linger = linger
 
     def run(self):
         '''
         Bind the pub and pull sockets for events
         '''
         # Set up the context
-        self.context = zmq.Context(1)
+        self.context = _EventContext()
         # Prepare the master event publisher
         self.epub_sock = self.context.socket(zmq.PUB)
+        self.epub_sock.setsockopt(zmq.LINGER, self.linger)
         epub_uri = 'ipc://{0}'.format(
                 os.path.join(self.opts['sock_dir'], 'master_event_pub.ipc')
                 )
         # Prepare master event pull socket
         self.epull_sock = self.context.socket(zmq.PULL)
+        self.epull_sock.setsockopt(zmq.LINGER, self.linger)
         epull_uri = 'ipc://{0}'.format(
                 os.path.join(self.opts['sock_dir'], 'master_event_pull.ipc')
                 )
@@ -401,26 +403,16 @@ class EventPublisher(Process):
                 448
                 )
 
-        try:
-            while True:
-                # Catch and handle EINTR from when this process is sent
-                # SIGUSR1 gracefully so we don't choke and die horribly
-                try:
-                    package = self.epull_sock.recv()
-                    self.epub_sock.send(package)
-                except zmq.ZMQError as exc:
-                    if exc.errno == errno.EINTR:
-                        continue
-                    raise exc
-        except KeyboardInterrupt:
-            if self.epub_sock.closed is False:
-                self.epub_sock.setsockopt(zmq.LINGER, 1)
-                self.epub_sock.close()
-            if self.epull_sock.closed is False:
-                self.epull_sock.setsockopt(zmq.LINGER, 1)
-                self.epull_sock.close()
-            if self.context.closed is False:
-                self.context.term()
+        while True:
+            # Catch and handle EINTR from when this process is sent
+            # SIGUSR1 gracefully so we don't choke and die horribly
+            try:
+                package = self.epull_sock.recv()
+                self.epub_sock.send(package)
+            except zmq.ZMQError as exc:
+                if exc.errno == errno.EINTR:
+                    continue
+                raise exc
 
 
 class Reactor(multiprocessing.Process, salt.state.Compiler):
