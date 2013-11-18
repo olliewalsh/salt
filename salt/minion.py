@@ -18,6 +18,7 @@ import time
 import traceback
 import sys
 import signal
+import collections
 from random import randint
 
 # Import third party libs
@@ -527,6 +528,7 @@ class Minion(object):
             self.functions,
             self.returners)
         self.grains_cache = self.opts['grains']
+        self.running_jobs = collections.deque()
 
     def __prep_mod_opts(self):
         '''
@@ -677,52 +679,104 @@ class Minion(object):
                 self.functions, self.returners = self.__load_modules()
                 self.schedule.functions = self.functions
                 self.schedule.returners = self.returners
+
+
+        if data['fun'] == 'saltutil.find_job' and self.running_jobs:
+            # This needs to return within ~5 seconds which is cutting it very fine on windows.
+            # Speed it up as much as possible
+            ret = {'retcode':0, 'success':True}
+            jid = data['arg'][0]
+            for job in self.running_jobs:
+                if jid == job['data']['jid']:
+                    ret['return'] = job['data']
+                    self._handle_return(data, ret)
+            return
+
         if isinstance(data['fun'], tuple) or isinstance(data['fun'], list):
-            target = Minion._thread_multi_return
+            target = self._thread_multi_return
+            runjob_target = Minion.mp_run_job_multi
         else:
-            target = Minion._thread_return
-        # We stash an instance references to allow for the socket
-        # communication in Windows. You can't pickle functions, and thus
-        # python needs to be able to reconstruct the reference on the other
-        # side.
-        instance = self
-        if self.opts['multiprocessing']:
-            if sys.platform.startswith('win'):
-                # let python reconstruct the minion on the other side if we're
-                # running on windows
-                instance = None
-            process = multiprocessing.Process(
-                target=target, args=(instance, self.opts, data)
-            )
+            target = self._thread_return
+            runjob_target = Minion.mp_run_job
+        if self.opts['multiprocessing'] and hasattr(os, 'fork'):
+            pid = os.fork()
+            if pid == 0:
+                target(data)
+                sys.exit()
         else:
-            process = threading.Thread(
-                target=target, args=(instance, self.opts, data)
-            )
-        process.start()
-        process.join()
+            if self.opts['multiprocessing']:
+                ret = multiprocessing.Queue(1)
+                process = multiprocessing.Process(
+                    target=runjob_target, args=(self.opts, data, ret)
+                )
+                process.start()
+                self.running_jobs.append({'data':data, 'process':process, 'ret':ret})
+            else:
+                process = threading.Thread(
+                    target=target, args=(data,)
+                )
+                process.start()
+                self.running_jobs.append({'data':data, 'process':process})
+
+    def _collect_jobs(self):
+        still_running = collections.deque()
+        while self.running_jobs:
+            job = self.running_jobs.popleft()
+            job['process'].join(0.001)
+            if job['process'].is_alive():
+                still_running.append(job)
+            elif 'ret' in job:
+                self._handle_return(job['data'], job['ret'].get())
+        self.running_jobs = still_running
+
+    def _handle_return(self, data, ret):
+        ret['jid'] = data['jid']
+        ret['fun'] = data['fun']
+        ret['fun_args'] = data['arg']
+        self._return_pub(ret)
+        if data['ret']:
+            ret['id'] = self.opts['id']
+            for returner in set(data['ret'].split(',')):
+                try:
+                    self.returners['{0}.returner'.format(
+                        returner
+                    )](ret)
+                except Exception as exc:
+                    log.error(
+                        'The return failed for job {0} {1}'.format(
+                        data['jid'],
+                        exc
+                        )
+                    )
 
     @classmethod
-    def _thread_return(cls, minion_instance, opts, data):
+    def mp_run_job(cls, opts, data, retq):
+        opts.update(data)
+        import salt.cli.caller
+        caller = salt.cli.caller.Caller(opts)
+        retq.put(caller.call())
+
+    @classmethod
+    def mp_run_multi_job(cls, opts, data, retq):
+        # TODO
+        pass
+
+    def _thread_return(self, data):
         '''
         This method should be used as a threading target, start the actual
         minion side execution.
         '''
-        # this seems awkward at first, but it's a workaround for Windows
-        # multiprocessing communication.
-        if not minion_instance:
-            minion_instance = cls(opts)
-        if opts['multiprocessing']:
-            fn_ = os.path.join(minion_instance.proc_dir, data['jid'])
-            salt.utils.daemonize_if(opts)
-            sdata = {'pid': os.getpid()}
-            sdata.update(data)
-            with salt.utils.fopen(fn_, 'w+') as fp_:
-                fp_.write(minion_instance.serial.dumps(sdata))
+        fn_ = os.path.join(self.proc_dir, data['jid'])
+        salt.utils.daemonize_if(self.opts)
+        sdata = {'pid': os.getpid()}
+        sdata.update(data)
+        with salt.utils.fopen(fn_, 'w+') as fp_:
+            fp_.write(self.serial.dumps(sdata))
         ret = {'success': False}
         function_name = data['fun']
-        if function_name in minion_instance.functions:
+        if function_name in self.functions:
             try:
-                func = minion_instance.functions[data['fun']]
+                func = self.functions[data['fun']]
                 args, kwargs = parse_args_and_kwargs(func, data['arg'], data)
                 sys.modules[func.__module__].__context__['retcode'] = 0
                 return_data = func(*args, **kwargs)
@@ -736,9 +790,9 @@ class Minion(object):
                             if not iret:
                                 iret = []
                             iret.append(single)
-                        tag = tagify([data['jid'], 'prog', opts['id'], str(ind)], 'job')
+                        tag = tagify([data['jid'], 'prog', self.opts['id'], str(ind)], 'job')
                         event_data = {'return': single}
-                        minion_instance._fire_master(event_data, tag)
+                        self._fire_master(event_data, tag)
                         ind += 1
                     ret['return'] = iret
                 else:
@@ -777,7 +831,7 @@ class Minion(object):
             except TypeError as exc:
                 trb = traceback.format_exc()
                 aspec = salt.utils.get_function_argspec(
-                    minion_instance.functions[data['fun']]
+                    self.functions[data['fun']]
                 )
                 msg = ('TypeError encountered executing {0}: {1}. See '
                        'debug log for more info.  Possibly a missing '
@@ -793,35 +847,13 @@ class Minion(object):
         else:
             ret['return'] = '{0!r} is not available.'.format(function_name)
 
-        ret['jid'] = data['jid']
-        ret['fun'] = data['fun']
-        ret['fun_args'] = data['arg']
-        minion_instance._return_pub(ret)
-        if data['ret']:
-            ret['id'] = opts['id']
-            for returner in set(data['ret'].split(',')):
-                try:
-                    minion_instance.returners['{0}.returner'.format(
-                        returner
-                    )](ret)
-                except Exception as exc:
-                    log.error(
-                        'The return failed for job {0} {1}'.format(
-                        data['jid'],
-                        exc
-                        )
-                    )
+        self._handle_return(data, ret)
 
-    @classmethod
-    def _thread_multi_return(cls, minion_instance, opts, data):
+    def _thread_multi_return(self, data):
         '''
         This method should be used as a threading target, start the actual
         minion side execution.
         '''
-        # this seems awkward at first, but it's a workaround for Windows
-        # multiprocessing communication.
-        if not minion_instance:
-            minion_instance = cls(opts)
         ret = {
             'return': {},
             'success': {},
@@ -829,7 +861,7 @@ class Minion(object):
         for ind in range(0, len(data['fun'])):
             ret['success'][data['fun'][ind]] = False
             try:
-                func = minion_instance.functions[data['fun'][ind]]
+                func = self.functions[data['fun'][ind]]
                 args, kwargs = parse_args_and_kwargs(func, data['arg'][ind], data)
                 ret['return'][data['fun'][ind]] = func(*args, **kwargs)
                 ret['success'][data['fun'][ind]] = True
@@ -841,24 +873,7 @@ class Minion(object):
                     )
                 )
                 ret['return'][data['fun'][ind]] = trb
-            ret['jid'] = data['jid']
-            ret['fun'] = data['fun']
-            ret['fun_args'] = data['arg']
-        minion_instance._return_pub(ret)
-        if data['ret']:
-            for returner in set(data['ret'].split(',')):
-                ret['id'] = opts['id']
-                try:
-                    minion_instance.returners['{0}.returner'.format(
-                        returner
-                    )](ret)
-                except Exception as exc:
-                    log.error(
-                        'The return failed for job {0} {1}'.format(
-                        data['jid'],
-                        exc
-                        )
-                    )
+        self._handle_return(data, ret)
 
     def _return_pub(self, ret, ret_cmd='_return'):
         '''
@@ -1204,7 +1219,7 @@ class Minion(object):
 
         while True:
             try:
-                self.schedule.eval()
+                # TODO: self.schedule.eval()
                 # Check if scheduler requires lower loop interval than
                 # the loop_interval setting
                 if self.schedule.loop_interval < loop_interval:
@@ -1239,6 +1254,7 @@ class Minion(object):
                             self.epub_sock.send(package)
                     except Exception:
                         pass
+                self._collect_jobs()
             except zmq.ZMQError:
                 # This is thrown by the interrupt caused by python handling the
                 # SIGCHLD. This is a safe error and we just start the poll
