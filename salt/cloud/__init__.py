@@ -12,7 +12,6 @@ import time
 import signal
 import logging
 import multiprocessing
-import datetime
 from itertools import groupby
 
 # Import salt.cloud libs
@@ -20,7 +19,6 @@ import salt.cloud.config
 import salt.cloud.utils
 import salt.cloud.loader
 import salt.utils.event
-from salt.utils.event import tagify
 from salt.cloud.exceptions import (
     SaltCloudNotFound,
     SaltCloudException,
@@ -56,36 +54,22 @@ class CloudClient(object):
             self.opts = opts
         else:
             self.opts = salt.cloud.config.cloud_config(path)
-        self.mapper = salt.cloud.Map(self.opts)
-
-    def _proc_runner(self, fun, low, user, tag, jid):
-        '''
-        Execute a cloud method in a multiprocess and fire the return on the event bus
-        '''
-        salt.utils.daemonize(False)
-        event = salt.utils.event.MasterEvent(self.opts['sock_dir'])
-        data = {'fun': 'cloud.{0}'.format(fun),
-                'jid': jid,
-                'user': user}
-        event.fire_event(data, tagify('new', base=tag))
-
-        try:
-            data['ret'] = self.low(fun, low)
-            data['success'] = True
-        except Exception as exc:
-            data['ret'] = 'Exception occured in runner {0}: {1}'.format(
-                    fun,
-                    exc,
-                    )
-        event.fire_event(data, tagify('ret', base=tag))
 
     def _opts_defaults(self, **kwargs):
         '''
         Set the opts dict to defaults and allow for opts to be overridden in
         the kwargs
         '''
-        self.mapper.opts['parallel'] = False
-        self.mapper.opts.update(kwargs)
+        self.opts['parallel'] = False
+        self.opts['keep_tmp'] = False
+        self.opts['deploy'] = True
+        self.opts['update_bootstrap'] = False
+        self.opts['show_deploy_args'] = False
+        self.opts['script_args'] = ''
+
+        self.opts.update(salt.cloud.config.CLOUD_CONFIG_DEFAULTS)
+        self.opts.update(kwargs)
+        return self.opts
 
     def low(self, fun, low):
         '''
@@ -95,84 +79,70 @@ class CloudClient(object):
         f_call = salt.utils.format_call(l_fun, low)
         return l_fun(*f_call.get('args', ()), **f_call.get('kwargs', {}))
 
-    def async(self, fun, low, user='UNKNOWN'):
-        '''
-        Execute a cloud function in a multiprocess and return the event tag
-        to watch
-        '''
-        jid = '{0:%Y%m%d%H%M%S%f}'.format(datetime.datetime.now())
-        tag = tagify(jid, prefix='cloud')
-        proc = multiprocessing.Process(
-                target=self._proc_runner,
-                args=(fun, low, user, tag, jid))
-        proc.start()
-        return tag
-
-    def master_call(self, **kwargs):
-        '''
-        Send a function call to a runner module through the master network
-        interface.
-        Expects that one of the kwargs is key 'fun' whose value is the
-        namestring of the function to call.
-        '''
-        load = kwargs
-        load['cmd'] = 'cloud'
-        sreq = salt.payload.SREQ(
-                'tcp://{0[interface]}:{0[ret_port]}'.format(self.opts),
-                )
-        ret = sreq.send('clear', load)
-        if ret == '':
-            raise salt.exceptions.EauthAuthenticationError
-        return ret
-
     def list_sizes(self, provider=None):
         '''
         List all available sizes in configured cloud systems
         '''
+        mapper = salt.cloud.Map(self._opts_defaults())
         return salt.cloud.utils.simple_types_filter(
-                self.mapper.size_list(provider))
+                mapper.size_list(provider))
 
     def list_images(self, provider=None):
         '''
         List all available images in configured cloud systems
         '''
+        mapper = salt.cloud.Map(self._opts_defaults())
         return salt.cloud.utils.simple_types_filter(
-                self.mapper.image_list(provider))
+                mapper.image_list(provider))
 
     def list_locations(self, provider=None):
         '''
         List all available locations in configured cloud systems
         '''
+        mapper = salt.cloud.Map(self._opts_defaults())
         return salt.cloud.utils.simple_types_filter(
-                self.mapper.location_list(provider))
+                mapper.location_list(provider))
 
     def query(self, query_type='list_nodes'):
         '''
         Query basic instance information
         '''
-        return self.mapper.map_providers_parallel(query_type)
+        mapper = salt.cloud.Map(self._opts_defaults())
+        return mapper.map_providers_parallel(query_type)
 
     def full_query(self, query_type='list_nodes_full'):
         '''
         Query all instance information
         '''
-        return self.mapper.map_providers_parallel(query_type)
+        mapper = salt.cloud.Map(self._opts_defaults())
+        return mapper.map_providers_parallel(query_type)
 
     def select_query(self, query_type='list_nodes_select'):
         '''
         Query select instance information
         '''
-        return self.mapper.map_providers_parallel(query_type)
+        mapper = salt.cloud.Map(self._opts_defaults())
+        return mapper.map_providers_parallel(query_type)
 
     def profile(self, profile, names, **kwargs):
         '''
         Pass in a profile to create, names is a list of vm names to allocate
         '''
-        self._opts_defaults(**kwargs)
+        mapper = salt.cloud.Map(self._opts_defaults(**kwargs))
         if isinstance(names, str):
             names = names.split(',')
         return salt.cloud.utils.simple_types_filter(
-                self.mapper.run_profile(profile, names))
+                mapper.run_profile(profile, names))
+
+    def destroy(self, names):
+        '''
+        Destroy the named vms
+        '''
+        mapper = salt.cloud.Map(self._opts_defaults())
+        if isinstance(names, str):
+            names = names.split(',')
+        return salt.cloud.utils.simple_types_filter(
+                mapper.destroy(names))
 
     def action(self, fun=None, cloudmap=None, names=None, provider=None,
               instance=None, kwargs=None):
@@ -184,11 +154,12 @@ class CloudClient(object):
             client.action(fun='show_instance', names=['myinstance'])
             client.action(fun='show_image', provider='my-ec2-config', kwargs={'image': 'ami-10314d79'})
         '''
+        mapper = salt.cloud.Map(self._opts_defaults(action=fun))
         if names and not provider:
             self.opts['action'] = fun
-            return self.mapper.do_action(names, kwargs)
+            return mapper.do_action(names, kwargs)
         if provider:
-            return self.mapper.do_function(provider, fun, kwargs)
+            return mapper.do_function(provider, fun, kwargs)
         else:
             # This should not be called without either an instance or a
             # provider.
@@ -197,7 +168,7 @@ class CloudClient(object):
             )
 
         return salt.cloud.utils.simple_types_filter(
-                self.mapper.run_profile(fun, names))
+                mapper.run_profile(fun, names))
 
     # map
     # create

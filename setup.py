@@ -171,6 +171,22 @@ class CloudSdist(sdist):
         # Let's the rest of the build command
         sdist.run(self)
 
+    def write_manifest(self):
+        if IS_WINDOWS_PLATFORM:
+            # Remove un-necessary scripts grabbed by MANIFEST.in
+            for filename in self.filelist.files[:]:
+                if filename in ('scripts/salt',
+                                'scripts/salt-cloud',
+                                'scripts/salt-key',
+                                'scripts/salt-master',
+                                'scripts/salt-run',
+                                'scripts/salt-ssh',
+                                'scripts/salt-syndic'):
+                    self.filelist.files.pop(
+                        self.filelist.files.index(filename)
+                    )
+        return sdist.write_manifest(self)
+
 
 class TestCommand(Command):
     description = 'Run tests'
@@ -352,9 +368,14 @@ VER = __version__  # pylint: disable=E0602
 DESC = ('Portable, distributed, remote execution and '
         'configuration management system')
 
-with open(SALT_REQS) as f:
-    REQUIREMENTS = [line for line in f.read().split('\n') if line]
-
+REQUIREMENTS = []
+with open(SALT_REQS) as rfh:
+    for line in rfh.readlines():
+        if not line or line.startswith('#'):
+            continue
+        if IS_WINDOWS_PLATFORM and 'libcloud' in line:
+            continue
+        REQUIREMENTS.append(line.strip())
 
 SETUP_KWARGS = {'name': NAME,
                 'version': VER,
