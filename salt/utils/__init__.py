@@ -530,18 +530,19 @@ def prep_jid(cachedir, sum_type, user='root', nocache=False):
     Return a job id and prepare the job id directory
     '''
     jid = gen_jid()
-    jid_dir_ = jid_dir(jid, cachedir, sum_type)
-    try:
-        os.makedirs(jid_dir_)
-    except OSError:
-        # Duplicate jid, try again
-        continue
-    with fopen(os.path.join(jid_dir_, 'jid'), 'w+') as fn_:
-        fn_.write(jid)
-    if nocache:
-        with fopen(os.path.join(jid_dir_, 'nocache'), 'w+') as fn_:
-            fn_.write('')
-    return jid
+    while True:
+        jid_dir_ = jid_dir(jid, cachedir, sum_type)
+        try:
+            os.makedirs(jid_dir_)
+        except OSError:
+            # Duplicate jid, try again
+            continue
+        with fopen(os.path.join(jid_dir_, 'jid'), 'w+') as fn_:
+            fn_.write(jid)
+        if nocache:
+            with fopen(os.path.join(jid_dir_, 'nocache'), 'w+') as fn_:
+                fn_.write('')
+        return jid
 
 
 def jid_dir(jid, cachedir, sum_type):
