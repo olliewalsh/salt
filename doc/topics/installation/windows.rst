@@ -198,16 +198,6 @@ Testing the Salt minion
 .. code-block:: bash
 
         master: ipaddress or hostname of your salt-master
-<<<<<<< HEAD
-=======
-        master_port: 4506
-        ipc_mode: tcp
-        root_dir: c:\
-        pki_dir: /etc/salt/pki
-        cachedir: /var/cache/salt
-        renderer: yaml_jinja
-        open_mode: False
->>>>>>> 33fe1a1... Merge minion pool chagnes to 0.16
 
 4.  Start the salt-minion
 
