@@ -1,6 +1,6 @@
+# -*- coding: utf-8 -*-
 '''
-The Saltutil module is used to manage the state of the salt minion itself. It
-is used to manage minion modules as well as automate updates to the salt minion
+The Saltutil module is used to manage the state of the salt minion itself. It is used to manage minion modules as well as automate updates to the salt minion.
 
 :depends:   - esky Python module for update functionality
 '''
@@ -19,6 +19,8 @@ import sqlite3
 # Import salt libs
 import salt.payload
 import salt.state
+import salt.client
+import salt.utils
 from salt.exceptions import SaltReqTimeoutError
 from salt._compat import string_types
 
@@ -154,7 +156,9 @@ def update(version=None):
 
     Returns details about the transaction upon completion.
 
-    CLI Example::
+    CLI Example:
+
+    .. code-block:: bash
 
         salt '*' saltutil.update 0.10.3
     '''
@@ -190,7 +194,9 @@ def sync_modules(env=None, refresh=True):
     to grab the contents of the _modules directory, base is the default
     environment.
 
-    CLI Example::
+    CLI Example:
+
+    .. code-block:: bash
 
         salt '*' saltutil.sync_modules
     '''
@@ -207,7 +213,9 @@ def sync_states(env=None, refresh=True):
     to grab the contents of the _states directory, base is the default
     environment.
 
-    CLI Example::
+    CLI Example:
+
+    .. code-block:: bash
 
         salt '*' saltutil.sync_states
     '''
@@ -224,13 +232,16 @@ def sync_grains(env=None, refresh=True):
     to grab the contents of the _grains directory, base is the default
     environment.
 
-    CLI Example::
+    CLI Example:
+
+    .. code-block:: bash
 
         salt '*' saltutil.sync_grains
     '''
     ret = _sync('grains', env)
     if refresh:
         refresh_modules()
+        refresh_pillar()
     return ret
 
 
@@ -241,7 +252,9 @@ def sync_renderers(env=None, refresh=True):
     to grab the contents of the _renderers directory, base is the default
     environment.
 
-    CLI Example::
+    CLI Example:
+
+    .. code-block:: bash
 
         salt '*' saltutil.sync_renderers
     '''
@@ -258,7 +271,9 @@ def sync_returners(env=None, refresh=True):
     to grab the contents of the _returners directory, base is the default
     environment.
 
-    CLI Example::
+    CLI Example:
+
+    .. code-block:: bash
 
         salt '*' saltutil.sync_returners
     '''
@@ -379,7 +394,7 @@ def running():
             data = serial.loads(sdata)
             ret.append(data)
     else:
-        procs = __salt__['status.procs']()
+        pid = os.getpid()
         for fn_ in os.listdir(proc_dir):
             path = os.path.join(proc_dir, fn_)
             with salt.utils.fopen(path, 'rb') as fp_:
@@ -387,10 +402,12 @@ def running():
             if not isinstance(data, dict):
                 # Invalid serial object
                 continue
-            if not procs.get(str(data['pid'])):
+            if not salt.utils.process.os_is_running(data['pid']):
                 # The process is no longer running, clear out the file and
                 # continue
                 os.remove(path)
+                continue
+            if data.get('pid') == pid:
                 continue
             ret.append(data)
     return ret
@@ -511,3 +528,77 @@ def revoke_auth():
     except SaltReqTimeoutError:
         return False
     return False
+
+
+def cmd(tgt,
+        fun,
+        arg=(),
+        timeout=None,
+        expr_form='glob',
+        ret='',
+        kwarg=None,
+        ssh=False,
+        **kwargs):
+    '''
+    Assuming this minion is a master, execute a salt command
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt '*' saltutil.cmd
+    '''
+    if ssh:
+        client = salt.client.SSHClient(
+                os.path.dirname(__opts__['conf_file']))
+    else:
+        client = salt.client.LocalClient(
+                os.path.dirname(__opts__['conf_file']))
+    ret = {}
+    for ret_comp in client.cmd_iter(
+            tgt,
+            fun,
+            arg,
+            timeout,
+            expr_form,
+            ret,
+            kwarg,
+            **kwargs):
+        ret.update(ret_comp)
+    return ret
+
+
+def cmd_iter(tgt,
+             fun,
+             arg=(),
+             timeout=None,
+             expr_form='glob',
+             ret='',
+             kwarg=None,
+             ssh=False,
+             **kwargs):
+    '''
+    Assuming this minion is a master, execute a salt command
+
+    CLI Example:
+
+    .. code-block:: bash
+
+        salt '*' saltutil.cmd
+    '''
+    if ssh:
+        client = salt.client.SSHClient(
+                os.path.dirname(__opts__['conf_file']))
+    else:
+        client = salt.client.LocalClient(
+                os.path.dirname(__opts__['conf_file']))
+    for ret in client.cmd_iter(
+            tgt,
+            fun,
+            arg,
+            timeout,
+            expr_form,
+            ret,
+            kwarg,
+            **kwargs):
+        yield ret

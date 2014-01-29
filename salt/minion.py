@@ -547,7 +547,7 @@ class MinionBase(object):
          'clear': self._handle_clear}[payload['enc']](payload['load'],
                                                       payload['sig'] if 'sig' in payload else None)
 
-    def _handle_aes(self, load):
+    def _handle_aes(self, load, sig=None):
         '''
         Takes the AES encrypted load, checks the signature if pub signatures
         are turned on, decrypts it, and runs the encapsulated instructions
@@ -1976,7 +1976,6 @@ class Matcher(object):
             return False
         ref = {'G': 'grain',
                'P': 'grain_pcre',
-               'X': 'exsel',
                'I': 'pillar',
                'L': 'list',
                'S': 'ipcidr',
