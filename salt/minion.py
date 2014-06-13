@@ -562,6 +562,7 @@ class Minion(MinionBase):
         Pass in the options dict
         '''
         self._running = None
+        self._test_sum_sequence = 0
 
         # Warn if ZMQ < 3.2
         if HAS_ZMQ and (not(hasattr(zmq, 'zmq_version_info')) or
@@ -994,6 +995,10 @@ class Minion(MinionBase):
                 log.warning(msg, exc_info=log.isEnabledFor(logging.DEBUG))
                 ret['return'] = '{0}: {1}'.format(msg, traceback.format_exc())
                 ret['out'] = 'nested'
+        elif function_name == "_test.get_sum_sequence":
+            ret['return'] = self._test_sum_sequence
+            ret['out'] = 'nested'
+            self._test_sum_sequence = 0
         else:
             ret['return'] = '{0!r} is not available.'.format(function_name)
             ret['out'] = 'nested'
@@ -1517,6 +1522,12 @@ class Minion(MinionBase):
                             self._fire_master(data['data'], data['tag'], data['events'], data['pretag'])
                         elif package.startswith('__master_disconnect'):
                             log.debug('handling master disconnect')
+                        elif package.startswith('_test_sum_sequence'):
+                            # Send n events then check that it == n(n+1)/2 to confirm that no events were dropped
+                            tag, data = salt.utils.event.MinionEvent.unpack(package)
+                            self._test_sum_sequence += self._test_sum_sequence + 1
+                            log.debug('TEST_SUM_SEQUENCE={0} (for {1})'.format(self._test_sum_sequence, data))
+                            continue # Don't resend test event
 
                         self.epub_sock.send(package)
                     except Exception:
